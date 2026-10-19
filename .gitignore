@@ -1,0 +1,30 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+# Dependencies, caches, generated output
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+*.log
+# Local editors and operating system
+.DS_Store
+.idea/
+.vscode/
+*.swp
+# Private data
+private-data/
+learner-data/
+recordings/
