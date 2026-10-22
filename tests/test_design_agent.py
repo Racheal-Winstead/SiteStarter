@@ -155,5 +155,70 @@ class RunDesignAgentTests(unittest.TestCase):
         self.assertEqual(len(model.calls), 1)
 
 
+BAD_JSON_VALUES = [None, [], ["x"], {}, {"a": 1}, "", "text", 0, 3.5, True]
+OBJECT_FIELDS = ["colors", "typography", "spacing", "responsive_rules"]
+
+
+class MalformedModelOutputTests(unittest.TestCase):
+    """Regression: wrong JSON types from the model must be rejected, never crash the loop."""
+
+    def test_nonempty_list_in_object_fields_is_rejected(self):
+        for field in OBJECT_FIELDS:
+            with self.subTest(field=field):
+                errors = validate_design_plan(plan_with(**{field: ["x"]}), BAKERY_BRIEF)
+                self.assertIn(f"{field} must be a JSON object", errors)
+
+    def test_list_status_is_rejected(self):
+        errors = validate_design_plan(plan_with(status=[]), BAKERY_BRIEF)
+        self.assertIn("status must be complete, needs_input, or failed", errors)
+
+    def test_list_font_is_rejected(self):
+        plan = plan_with(typography={"heading_font": ["Georgia"], "body_font": "system-ui", "base_size_px": 18})
+        errors = validate_design_plan(plan, BAKERY_BRIEF)
+        self.assertTrue(any(e.startswith("typography.heading_font") for e in errors), errors)
+
+    def test_validator_never_raises_on_bad_types(self):
+        fields = ["request_id", "agent_name", "status", "warnings", "section_order"] + OBJECT_FIELDS
+        nested = {
+            "colors": ["background", "text", "accent"],
+            "typography": ["heading_font", "body_font", "base_size_px"],
+            "spacing": ["section_gap_px", "max_width_px"],
+            "responsive_rules": ["breakpoint_px", "mobile_layout"],
+        }
+        for value in BAD_JSON_VALUES:
+            for field in fields:
+                with self.subTest(field=field, value=value):
+                    self.assertIsInstance(validate_design_plan(plan_with(**{field: value}), BAKERY_BRIEF), list)
+            for section, keys in nested.items():
+                for key in keys:
+                    with self.subTest(field=f"{section}.{key}", value=value):
+                        plan = copy.deepcopy(GOOD_PLAN)
+                        plan[section][key] = value
+                        self.assertTrue(validate_design_plan(plan, BAKERY_BRIEF))
+
+    def test_top_level_non_object_json_is_rejected(self):
+        for raw in ("[]", "[1, 2]", "null", "42", '"plan"', "true"):
+            with self.subTest(raw=raw):
+                result = run_design_agent(BAKERY_BRIEF, scripted_model(raw, raw))
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(result["errors"], ["plan must be a JSON object"])
+
+    def test_loop_retries_once_then_accepts(self):
+        for field in OBJECT_FIELDS:
+            with self.subTest(field=field):
+                model = scripted_model(plan_with(**{field: ["x"]}), GOOD_PLAN)
+                result = run_design_agent(BAKERY_BRIEF, model)
+                self.assertEqual(result["status"], "accepted")
+                self.assertEqual(result["attempts"], 2)
+                self.assertIn(f"{field} must be a JSON object", model.calls[1][1]["content"])
+
+    def test_loop_returns_clear_failure_when_still_malformed(self):
+        bad = plan_with(status=[])
+        result = run_design_agent(BAKERY_BRIEF, scripted_model(bad, bad))
+        self.assertEqual(result["status"], "failed")
+        self.assertIsNone(result["plan"])
+        self.assertIn("status must be complete, needs_input, or failed", result["errors"])
+
+
 if __name__ == "__main__":
     unittest.main()
