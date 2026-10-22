@@ -1,4 +1,4 @@
-# Multi-agent_tool
+# SiteStarter
 
 A shared multi-agent project for Racheal Winstead and Sam H. to build and test coordinated agent workflows.
 
@@ -24,8 +24,8 @@ Branch names identify work, not access restrictions. Collaborators can access re
 Each person uses their own GitHub account. Sam must accept the collaborator invitation before cloning.
 
 ```sh
-git clone https://github.com/Racheal-Winstead/Multi-agent_tool.git
-cd Multi-agent_tool
+git clone https://github.com/Racheal-Winstead/SiteStarter.git
+cd SiteStarter
 git fetch origin
 ```
 
