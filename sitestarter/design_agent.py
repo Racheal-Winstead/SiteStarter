@@ -60,6 +60,15 @@ def _int_in(value, low, high):
     return isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
 
 
+def _section(plan, key, errors):
+    """Return plan[key] if it is a JSON object; otherwise record an error and return {}."""
+    value = plan.get(key)
+    if isinstance(value, dict):
+        return value
+    errors.append(f"{key} must be a JSON object")
+    return {}
+
+
 def validate_design_plan(plan, brief):
     """Return a list of error strings. An empty list means the plan is accepted."""
     if not isinstance(plan, dict):
@@ -71,7 +80,7 @@ def validate_design_plan(plan, brief):
     if plan.get("agent_name") != AGENT_NAME:
         errors.append(f'agent_name must be "{AGENT_NAME}"')
     status = plan.get("status")
-    if status not in STATUSES:
+    if not isinstance(status, str) or status not in STATUSES:
         errors.append("status must be complete, needs_input, or failed")
     if not isinstance(plan.get("warnings", []), list):
         errors.append("warnings must be a list")
@@ -84,18 +93,21 @@ def validate_design_plan(plan, brief):
     if status != "complete":
         return errors
 
-    colors = plan.get("colors") or {}
+    colors = _section(plan, "colors", errors)
+    colors_ok = True
     for key in ("background", "text", "accent"):
         if not isinstance(colors.get(key), str) or not HEX.match(colors[key]):
             errors.append(f"colors.{key} must be a 6-digit hex value like #FFF8EE")
-    if not any(e.startswith("colors.") for e in errors):
+            colors_ok = False
+    if colors_ok:
         ratio = contrast_ratio(colors["text"], colors["background"])
         if ratio < MIN_CONTRAST:
             errors.append(f"text/background contrast is {ratio:.2f}:1, needs at least {MIN_CONTRAST}:1")
 
-    typo = plan.get("typography") or {}
+    typo = _section(plan, "typography", errors)
     for key in ("heading_font", "body_font"):
-        if typo.get(key) not in ALLOWED_FONTS:
+        font = typo.get(key)
+        if not isinstance(font, str) or font not in ALLOWED_FONTS:
             errors.append(f"typography.{key} must be one of {sorted(ALLOWED_FONTS)}")
     if not _int_in(typo.get("base_size_px"), 16, 20):
         errors.append("typography.base_size_px must be a whole number from 16 to 20")
@@ -103,13 +115,13 @@ def validate_design_plan(plan, brief):
     if plan.get("section_order") != REQUIRED_SECTIONS:
         errors.append('section_order must be exactly ["heading", "about", "contact"]')
 
-    spacing = plan.get("spacing") or {}
+    spacing = _section(plan, "spacing", errors)
     if not _int_in(spacing.get("section_gap_px"), 16, 64):
         errors.append("spacing.section_gap_px must be from 16 to 64")
     if not _int_in(spacing.get("max_width_px"), 600, 1200):
         errors.append("spacing.max_width_px must be from 600 to 1200")
 
-    rules = plan.get("responsive_rules") or {}
+    rules = _section(plan, "responsive_rules", errors)
     if not _int_in(rules.get("breakpoint_px"), 480, 768):
         errors.append("responsive_rules.breakpoint_px must be from 480 to 768")
     if rules.get("mobile_layout") != "single_column":
