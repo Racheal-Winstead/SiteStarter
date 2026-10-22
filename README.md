@@ -1,4 +1,6 @@
-# Multi-agent_tool
+# SiteStarter
+
+SiteStarter turns a short, everyday description from a small-business owner or individual with little or no coding experience into a single-page website draft: a content agent and a design agent plan at the same time, then a builder agent combines their plans into one page.
 
 A shared multi-agent project for Racheal Winstead and Sam H. to build and test coordinated agent workflows.
 
