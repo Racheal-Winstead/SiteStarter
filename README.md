@@ -22,10 +22,20 @@ The build writes `dist/index.html`, a self-contained file you can open or share.
 
 The bakery files are explicitly fictional sample data. To use your own facts, copy both JSON files and supply `request_id`, `name`, `purpose`, `about`, and `contact` in the brief. The design plan must use the same request ID and pass the design validator. Missing information, malformed JSON, incomplete plans, low contrast, and unsupported design values stop the build before an output file is created. Business text is escaped, contact details stay as supplied text, and the page loads no scripts, fonts, or other external assets.
 
+## Run the design-to-builder handoff
+
+```sh
+python3 -m sitestarter.handoff_demo --brief examples/bakery-brief.json --model-response examples/bakery-design.json
+```
+
+This passes the brief to the design agent, sends its accepted plan to the builder, and runs final checks on the built page before writing `dist/handoff.html`. There is no live model yet: `--model-response` is a recorded design-agent reply that stands in for the model call, and it goes through the same validation and one retry. Repeat `--model-response` to replay a rejected reply followed by a retry. A rejected plan, a plan for a different request, a `needs_input` reply, or a page that fails final checks stops the run without writing a file.
+
 ## What is implemented
 
 - `sitestarter/design_agent.py`: call an injected model function, validate its JSON, and retry once on an error. Tests use scripted responses.
 - `sitestarter/builder.py`: turn explicit brief facts and an accepted complete plan into responsive HTML. This is a deterministic offline renderer, not an AI Builder agent.
+- `sitestarter/handoff.py`: design agent → builder handoff. Only an accepted plan reaches the builder, and HTML is returned only after final checks pass.
+- `sitestarter/final_checks.py`: checks on the finished page: no scripts, embeds, forms, event handlers, outside links, or resource-loading CSS; the content security policy is present; sections are in order; and the approved name and contact appear exactly as supplied.
 - `python3 -m sitestarter --help`: build command with bounded JSON input and output overwrite protection.
 - GitHub Actions: run the tests and sample build on Python 3.9 and 3.12 for pushes and pull requests.
 
