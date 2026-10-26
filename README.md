@@ -4,6 +4,10 @@ A shared multi-agent project for Racheal Winstead and Sam H. to build and test c
 
 The product scope, architecture, and implementation stack will be agreed together before building.
 
+## Design documentation
+
+See the [SiteStarter architecture](docs/architecture.md) for the updated Mermaid workflow, agent handoffs, validation, retry limits, stop conditions, and component ownership. This describes the proposed design; implementation and verification are separate milestones.
+
 ## Branches
 
 ```text
