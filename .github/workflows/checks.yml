@@ -1,0 +1,26 @@
+name: Python checks and offline build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Build sample HTML
+        run: python -m sitestarter --brief examples/bakery-brief.json --plan examples/bakery-design.json
+      - name: Design-to-builder handoff demo
+        run: python -m sitestarter.handoff_demo --brief examples/bakery-brief.json --model-response examples/bakery-design.json
