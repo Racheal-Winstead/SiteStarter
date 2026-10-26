@@ -96,7 +96,7 @@ def validate_design_plan(plan, brief):
     colors = _section(plan, "colors", errors)
     colors_ok = True
     for key in ("background", "text", "accent"):
-        if not isinstance(colors.get(key), str) or not HEX.match(colors[key]):
+        if not isinstance(colors.get(key), str) or not HEX.fullmatch(colors[key]):
             errors.append(f"colors.{key} must be a 6-digit hex value like #FFF8EE")
             colors_ok = False
     if colors_ok:

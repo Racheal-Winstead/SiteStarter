@@ -1,0 +1,11 @@
+{
+  "request_id": "demo-bakery-001",
+  "agent_name": "design_agent",
+  "status": "complete",
+  "colors": {"background": "#FFF8EE", "text": "#3B2412", "accent": "#8B5A2B"},
+  "typography": {"heading_font": "Georgia", "body_font": "system-ui", "base_size_px": 18},
+  "section_order": ["heading", "about", "contact"],
+  "spacing": {"section_gap_px": 48, "max_width_px": 1000},
+  "responsive_rules": {"breakpoint_px": 600, "mobile_layout": "single_column"},
+  "warnings": []
+}
