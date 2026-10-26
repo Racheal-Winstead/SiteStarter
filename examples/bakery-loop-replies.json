@@ -1,0 +1,89 @@
+{
+  "_note": "Recorded replies for the offline demo. These are hand-written stand-ins for model output, not live AI. Each list is played back in order.",
+  "content_agent": [
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "content_agent",
+      "status": "complete",
+      "heading": "A little warmth and something freshly baked for every family in the neighborhood",
+      "about_text": "This fictional bakery is a sample for trying SiteStarter. Replace this text with your own approved business description before sharing your page.",
+      "contact": "hello@example.com",
+      "missing_information": [],
+      "warnings": []
+    },
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "content_agent",
+      "round": 1,
+      "verdict": "agree",
+      "requests": []
+    },
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "content_agent",
+      "status": "complete",
+      "heading": "A little warmth. Something freshly baked.",
+      "about_text": "This fictional bakery is a sample for trying SiteStarter. Replace this text with your own approved business description before sharing your page.",
+      "contact": "hello@example.com",
+      "missing_information": [],
+      "warnings": []
+    },
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "content_agent",
+      "round": 2,
+      "verdict": "agree",
+      "requests": []
+    }
+  ],
+  "design_agent": [
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "design_agent",
+      "status": "complete",
+      "colors": {
+        "background": "#FFF8EE",
+        "text": "#3B2412",
+        "accent": "#8B5A2B"
+      },
+      "typography": {
+        "heading_font": "Georgia",
+        "body_font": "system-ui",
+        "base_size_px": 18
+      },
+      "section_order": [
+        "heading",
+        "about",
+        "contact"
+      ],
+      "spacing": {
+        "section_gap_px": 48,
+        "max_width_px": 1000
+      },
+      "responsive_rules": {
+        "breakpoint_px": 600,
+        "mobile_layout": "single_column"
+      },
+      "warnings": []
+    },
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "design_agent",
+      "round": 1,
+      "verdict": "revise",
+      "requests": [
+        {
+          "target_field": "heading",
+          "reason": "At the planned heading size this wraps to four lines on a 390px phone. Keep it under 45 characters."
+        }
+      ]
+    },
+    {
+      "request_id": "demo-bakery-001",
+      "agent_name": "design_agent",
+      "round": 2,
+      "verdict": "agree",
+      "requests": []
+    }
+  ]
+}
