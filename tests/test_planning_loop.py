@@ -54,6 +54,28 @@ def with_(base, **changes):
     return plan
 
 
+class FakeClock:
+    """A clock the test controls. advance_after() wraps an agent so the clock jumps during its Nth call."""
+
+    def __init__(self):
+        self.now = 0
+
+    def __call__(self):
+        return self.now
+
+    def advance_after(self, agent, to, on_call):
+        count = [0]
+
+        def wrapped(task):
+            count[0] += 1
+            reply = agent(task)
+            if count[0] == on_call:
+                self.now = to
+            return reply
+        wrapped.tasks = agent.tasks
+        return wrapped
+
+
 class LoopFlowTests(unittest.TestCase):
     def test_agree_in_first_round_builds_without_revisions(self):
         content = scripted(CONTENT, review("content_agent", 1))
@@ -201,10 +223,10 @@ class StopConditionTests(unittest.TestCase):
         self.assertEqual(result["errors"], ["model call failed: ConnectionError"])
 
     def test_deadline_stops_the_run(self):
-        ticks = iter([0, 0, 1, 300, 300, 300])
+        clock = FakeClock()
         content = scripted(CONTENT, review("content_agent", 1))
-        design = scripted(DESIGN, review("design_agent", 1))
-        result = run_planning_loop(BRIEF, content, design, clock=lambda: next(ticks))
+        design = clock.advance_after(scripted(DESIGN, review("design_agent", 1)), to=300, on_call=1)
+        result = run_planning_loop(BRIEF, content, design, clock=clock)
         self.assertEqual((result["status"], result["stage"]), ("failed", "timed_out"))
         self.assertIsNone(result["html"])
 
@@ -287,6 +309,120 @@ class LoopDemoTests(unittest.TestCase):
         run, built = self.run_demo({"content_agent": [CONTENT], "design_agent": []}, "loop.html")
         self.assertEqual(run.returncode, 1)
         self.assertNotIn("Traceback", run.stderr)
+        self.assertFalse(built)
+
+
+class CodexRegressionTests(unittest.TestCase):
+    """Probes from Codex's review of 710adda."""
+
+    def test_non_string_target_field_is_rejected_not_crashed(self):
+        for target in ([], ["heading"], {}, {"a": 1}, 7, None, True):
+            with self.subTest(target=target):
+                bad = review("design_agent", 1, "revise", [{"target_field": target, "reason": "shorter"}])
+                errors = validate_review(bad, BRIEF, "design_agent", 1)
+                self.assertIn("each target_field must be text", errors)
+
+    def test_list_target_then_good_review_is_retried_and_built(self):
+        bad = review("design_agent", 1, "revise", [{"target_field": [], "reason": "shorter"}])
+        content = scripted(CONTENT, review("content_agent", 1))
+        design = scripted(DESIGN, bad, review("design_agent", 1))
+        result = run_planning_loop(BRIEF, content, design)
+        self.assertEqual(result["status"], "ready", result["errors"])
+        self.assertEqual([c["accepted"] for c in result["calls"] if c["kind"] == "review"], [False, True, True])
+
+    def test_list_target_twice_fails_cleanly_without_html(self):
+        bad = review("design_agent", 1, "revise", [{"target_field": [], "reason": "shorter"}])
+        result = run_planning_loop(BRIEF, scripted(CONTENT), scripted(DESIGN, bad, bad))
+        self.assertEqual((result["status"], result["stage"]), ("failed", "design_agent:review"))
+        self.assertIsNone(result["html"])
+
+    def test_a_check_that_crashes_fails_the_step_instead_of_the_run(self):
+        import sitestarter.planning_loop as loop
+        original = loop.validate_review
+        loop.validate_review = lambda *args: (_ for _ in ()).throw(TypeError("boom"))
+        try:
+            result = run_planning_loop(BRIEF, scripted(CONTENT), scripted(DESIGN, review("design_agent", 1),
+                                                                            review("design_agent", 1)))
+        finally:
+            loop.validate_review = original
+        self.assertEqual((result["status"], result["stage"]), ("failed", "design_agent:review"))
+        self.assertEqual(result["errors"], ["response could not be checked: TypeError"])
+
+    def test_late_last_review_is_discarded_and_nothing_is_built(self):
+        # Codex's probe: the clock goes 0 -> 241 inside the last valid round-2 content review.
+        clock = FakeClock()
+        content = clock.advance_after(
+            scripted(CONTENT, review("content_agent", 1), with_(CONTENT, heading="Fresh bread"),
+                     review("content_agent", 2)), to=241, on_call=4)
+        design = scripted(DESIGN, review("design_agent", 1, "revise", [ask("heading")]), review("design_agent", 2))
+        result = run_planning_loop(BRIEF, content, design, clock=clock)
+        self.assertEqual((result["status"], result["stage"]), ("failed", "timed_out"))
+        self.assertIsNone(result["html"])
+        self.assertIn("replied after the 240s deadline; reply discarded", result["errors"][0])
+        last = result["calls"][-1]
+        self.assertEqual((last["agent"], last["kind"], last["round"], last["accepted"], last.get("late")),
+                         ("content_agent", "review", 2, False, True))
+
+    def test_late_first_plan_is_discarded(self):
+        clock = FakeClock()
+        content = clock.advance_after(scripted(CONTENT), to=241, on_call=1)
+        design = scripted(DESIGN)
+        result = run_planning_loop(BRIEF, content, design, clock=clock)
+        self.assertEqual((result["status"], result["stage"]), ("failed", "timed_out"))
+        self.assertIsNone(result["content_plan"])
+        self.assertEqual(design.tasks, [])
+
+    def test_reply_exactly_at_the_deadline_is_still_accepted(self):
+        clock = FakeClock()
+        content = clock.advance_after(scripted(CONTENT, review("content_agent", 1)), to=240, on_call=2)
+        design = scripted(DESIGN, review("design_agent", 1))
+        result = run_planning_loop(BRIEF, content, design, clock=clock)
+        self.assertEqual(result["status"], "ready", result["errors"])
+
+    def test_deadline_passing_during_build_withholds_the_page(self):
+        import sitestarter.planning_loop as loop
+        clock = FakeClock()
+        original = loop.build_site
+
+        def slow_build(facts, plan):
+            clock.now = 241
+            return original(facts, plan)
+        loop.build_site = slow_build
+        try:
+            result = run_planning_loop(BRIEF, scripted(CONTENT, review("content_agent", 1)),
+                                       scripted(DESIGN, review("design_agent", 1)), clock=clock)
+        finally:
+            loop.build_site = original
+        self.assertEqual((result["status"], result["stage"]), ("failed", "timed_out"))
+        self.assertIsNone(result["html"])
+
+    def test_builder_never_runs_once_the_deadline_has_passed(self):
+        import sitestarter.planning_loop as loop
+        clock = FakeClock()
+        original_gate, original_build = loop.final_plan_gate, loop.build_site
+        built = []
+
+        def slow_gate(brief, content, design):
+            clock.now = 241
+            return original_gate(brief, content, design)
+        loop.final_plan_gate = slow_gate
+        loop.build_site = lambda facts, plan: built.append(1) or original_build(facts, plan)
+        try:
+            result = run_planning_loop(BRIEF, scripted(CONTENT, review("content_agent", 1)),
+                                       scripted(DESIGN, review("design_agent", 1)), clock=clock)
+        finally:
+            loop.final_plan_gate, loop.build_site = original_gate, original_build
+        self.assertEqual((result["status"], result["stage"]), ("failed", "timed_out"))
+        self.assertEqual(built, [])
+        self.assertIsNone(result["html"])
+
+    def test_cli_list_target_fails_without_traceback(self):
+        bad = review("design_agent", 1, "revise", [{"target_field": [], "reason": "shorter"}])
+        run, built = LoopDemoTests.run_demo(self, {"content_agent": [CONTENT], "design_agent": [DESIGN, bad, bad]},
+                                            "loop.html")
+        self.assertEqual(run.returncode, 1)
+        self.assertNotIn("Traceback", run.stderr)
+        self.assertIn("status=failed stage=design_agent:review", run.stdout)
         self.assertFalse(built)
 
 
