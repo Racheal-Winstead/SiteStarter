@@ -30,12 +30,21 @@ python3 -m sitestarter.handoff_demo --brief examples/bakery-brief.json --model-r
 
 This passes the brief to the design agent, sends its accepted plan to the builder, and runs final checks on the built page before writing `dist/handoff.html`. There is no live model yet: `--model-response` is a recorded design-agent reply that stands in for the model call, and it goes through the same validation and one retry. Repeat `--model-response` to replay a rejected reply followed by a retry. A rejected plan, a plan for a different request, a `needs_input` reply, or a page that fails final checks stops the run without writing a file.
 
+## Run the content-design review loop
+
+```sh
+python3 -m sitestarter.loop_demo --brief examples/bakery-brief.json --replies examples/bakery-loop-replies.json
+```
+
+The content agent and design agent each write a plan, then review each other's plan for up to three rounds before a final plan gate and the builder. In the recorded example the design agent asks for a shorter heading, the content agent revises it, and both agree in round 2. The replies are hand-written stand-ins for model output, not live AI. See `docs/content-design-loop.md` for the data contracts and stop rules.
+
 ## What is implemented
 
 - `sitestarter/design_agent.py`: call an injected model function, validate its JSON, and retry once on an error. Tests use scripted responses.
 - `sitestarter/builder.py`: turn explicit brief facts and an accepted complete plan into responsive HTML. This is a deterministic offline renderer, not an AI Builder agent.
 - `sitestarter/handoff.py`: design agent → builder handoff. Only an accepted plan reaches the builder, and HTML is returned only after final checks pass.
 - `sitestarter/final_checks.py`: checks on the finished page: no scripts, embeds, forms, event handlers, outside links, or resource-loading CSS; the content security policy is present; sections are in order; and the approved name and contact appear exactly as supplied.
+- `sitestarter/planning_loop.py`: content ↔ design review loop with handoff checks, a three-round cap, a deadline, and a final plan gate before the builder.
 - `python3 -m sitestarter --help`: build command with bounded JSON input and output overwrite protection.
 - GitHub Actions: run the tests and sample build on Python 3.9 and 3.12 for pushes and pull requests.
 
