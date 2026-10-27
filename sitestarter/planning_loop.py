@@ -19,7 +19,15 @@ Flow (all checks are plain code; agents only return JSON text):
 
 Each agent step gets two attempts (the first plus one retry with the errors).
 A model error, invalid JSON, or a failed check uses an attempt. A needs_input
-plan stops the run so the user can be asked. A deadline caps the whole run.
+plan stops the run so the user can be asked. A deadline caps the whole run: it
+is checked before and right after every agent call, and again before the plan
+gate, before building, and before returning a page. A reply that arrives after
+the deadline is discarded.
+
+Limitation: agent calls are plain synchronous functions. If one blocks, this
+code cannot interrupt it; it only refuses the late reply once the call returns.
+A live provider needs its own request timeout (for example the HTTP client's
+timeout set to the 45-second per-attempt limit) so a stuck call ends.
 
 Scope: this module is the loop and its checks. The Content Agent and the
 Coordinator belong to Racheal; here the content agent is any function that
@@ -137,6 +145,9 @@ def validate_review(review, brief, reviewer, round_number):
     for item in requests:
         if not isinstance(item, dict) or set(item) != {"target_field", "reason"}:
             errors.append("each request must have exactly target_field and reason")
+        elif not isinstance(item["target_field"], str):
+            # Type-check first: a list or dict here is unhashable and would crash a set lookup.
+            errors.append("each target_field must be text")
         elif item["target_field"] not in allowed:
             errors.append(f"{reviewer} may only ask to change {sorted(allowed)}")
         elif not _text(item["reason"], REASON_MAX):
@@ -177,10 +188,13 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
     started = clock()
     state = {"content": None, "design": None, "rounds": 0}
 
+    def check_deadline(when):
+        if clock() - started > deadline_seconds:
+            raise _Stop("failed", "timed_out", [f"run passed the {deadline_seconds}s deadline {when}"])
+
     def call(agent_name, agent, task, check):
         for attempt in range(1, MAX_ATTEMPTS + 1):
-            if clock() - started > deadline_seconds:
-                raise _Stop("failed", "timed_out", [f"run passed the {deadline_seconds}s deadline"])
+            check_deadline("before an agent call")
             entry = {"agent": agent_name, "kind": task["kind"], "round": task.get("round", 0),
                      "attempt": attempt}
             try:
@@ -188,8 +202,20 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
             except Exception as exc:  # provider errors and timeouts use the attempt
                 errors = [f"model call failed: {type(exc).__name__}"]
             else:
+                if clock() - started > deadline_seconds:
+                    # A reply that arrives after the deadline is discarded, never used.
+                    entry.update(accepted=False, late=True)
+                    log.append(entry)
+                    raise _Stop("failed", "timed_out", [
+                        f"{agent_name} replied after the {deadline_seconds}s deadline; reply discarded"])
                 value = _parse(raw)
-                errors = ["response was not valid JSON"] if value is None else check(value)
+                if value is None:
+                    errors = ["response was not valid JSON"]
+                else:
+                    try:
+                        errors = check(value)
+                    except Exception as exc:  # a check must never crash the run
+                        errors = [f"response could not be checked: {type(exc).__name__}"]
             entry["accepted"] = not errors
             log.append(entry)
             if not errors:
@@ -250,6 +276,7 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
                 state["design"] = accept_plan(DESIGN_AGENT, call(DESIGN_AGENT, design_agent, dict(
                     base, kind="revise", round=round_number, plan=state["design"],
                     requests=content_review["requests"]), design_check))
+        check_deadline("before the final plan gate")
     except _Stop as stop:
         return result(stop.status, stop.stage, stop.errors)
 
@@ -262,10 +289,17 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
                   "purpose": content["heading"], "about": content["about_text"],
                   "contact": content["contact"]}
     try:
+        check_deadline("before building")
         html = build_site(page_facts, state["design"])
     except BuildError as exc:
         return result("failed", "build", [str(exc)])
+    except _Stop as stop:
+        return result(stop.status, stop.stage, stop.errors)
     errors = check_final_html(html, page_facts)
     if errors:
         return result("failed", "final_checks", errors)
+    try:
+        check_deadline("before returning the page")
+    except _Stop as stop:
+        return result(stop.status, stop.stage, stop.errors)
     return result("ready", "done", [], html=html)
