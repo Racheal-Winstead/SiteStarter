@@ -54,7 +54,8 @@ Every diamond is plain code. Agents only return JSON text. An agent saying "agre
 | Still revising after round 3 | Stop as failed: "content and design plans did not agree after 3 rounds"; nothing is built |
 | Final plan gate fails | Stop as failed; nothing is built |
 | Built page fails final checks | Stop; the page is never returned |
-| Run passes 240 seconds | Stop as timed out |
+| Run passes 240 seconds | Stop as timed out. The deadline is checked before and right after every agent call and again before the plan gate, the build, and returning the page. A reply that arrives late is discarded, never used |
+| A check itself hits an unexpected error | That reply counts as invalid (one retry, then stop), never a crash |
 
 Three review rounds means at most two revision cycles. Worst case with no retries is 2 first plans + 6 reviews + 4 revisions = 12 agent calls.
 
@@ -63,10 +64,11 @@ Three review rounds means at most two revision cycles. Worst case with no retrie
 Built and tested on `sam-h-content-design-loop`:
 - `sitestarter/planning_loop.py`: the loop, all handoff checks above, the round cap, the deadline check, the final plan gate, the builder call, and the final page checks.
 - `python3 -m sitestarter.loop_demo`: runs the loop offline with recorded replies (`examples/bakery-loop-replies.json`). The replies are hand-written stand-ins for model output, not live AI.
-- `tests/test_planning_loop.py`: 24 tests with scripted agents.
+- `tests/test_planning_loop.py`: 34 tests with scripted agents.
 
 Not built yet:
 - A live model call for either agent (the API key is still deferred).
 - Racheal's Content Agent and Coordinator. In this code the content agent is any function that returns text.
 - Running the first two plans at the same time, per-attempt 45-second limits, attempt IDs, and session state. Those are Coordinator work. Here the agents run one after another and only the overall deadline is checked.
 - An AI builder. The builder is still the deterministic renderer.
+- A hard timeout on a stuck agent call. Agent calls are synchronous functions, so this code can only refuse a late reply once the call returns. A live provider needs its own request timeout (the 45-second per-attempt limit) so a stuck call actually ends.
