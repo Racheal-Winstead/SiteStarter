@@ -103,3 +103,40 @@ def check_final_html(html, brief):
         errors.append("brief must be a JSON object")
 
     return errors
+
+
+# Text that reads like orders to an AI system or like markup. The builder
+# escapes it, so nothing runs, but a business owner would not usually write
+# it, and nothing else in the run tells them it ended up on their page.
+INSTRUCTION_LIKE = [
+    re.compile(r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}"
+               r"\b(rules|instructions|prompts?|directions)\b", re.IGNORECASE),
+    re.compile(r"\b(system prompt|developer message|you are now|act as an?|jailbreak)\b", re.IGNORECASE),
+    re.compile(r"<\s*/?\s*(script|iframe|img|svg|object|embed|style|link)\b", re.IGNORECASE),
+    re.compile(r"\bon(error|load|click|mouseover)\s*=", re.IGNORECASE),
+    re.compile(r"\bjavascript\s*:", re.IGNORECASE),
+]
+WARN_FIELDS = ("name", "purpose", "about", "contact")
+
+
+def find_instruction_like_text(page_facts):
+    """Return non-blocking warnings for page text that looks like AI instructions or markup.
+
+    These are warnings, not errors: the page stays safe because the builder
+    escapes text. Whether a warning should block the page or ask the user is
+    a product decision for the Coordinator and interface, not this check.
+    """
+    warnings = []
+    if not isinstance(page_facts, dict):
+        return warnings
+    for field in WARN_FIELDS:
+        value = page_facts.get(field)
+        if not isinstance(value, str):
+            continue
+        for pattern in INSTRUCTION_LIKE:
+            match = pattern.search(value)
+            if match:
+                warnings.append({"field": field, "code": "instruction_like_text",
+                                 "match": match.group(0)[:60]})
+                break
+    return warnings
