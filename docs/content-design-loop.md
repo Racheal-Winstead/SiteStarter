@@ -64,7 +64,7 @@ Three review rounds means at most two revision cycles. Worst case with no retrie
 Built and tested on `sam-h-content-design-loop`:
 - `sitestarter/planning_loop.py`: the loop, all handoff checks above, the round cap, the deadline check, the final plan gate, the builder call, and the final page checks.
 - `python3 -m sitestarter.loop_demo`: runs the loop offline with recorded replies (`examples/bakery-loop-replies.json`). The replies are hand-written stand-ins for model output, not live AI.
-- `tests/test_planning_loop.py`: 34 tests with scripted agents. `tests/test_trace.py`: 23 tests for the trace, the warnings, and the trace command.
+- `tests/test_planning_loop.py`: 34 tests with scripted agents. `tests/test_trace.py`: 31 tests for the trace, the warnings, keeping input text out of the trace, and the trace command.
 
 ## Scoring the loop
 
@@ -87,13 +87,20 @@ A case can also list the fields it expects final validation to warn about (`"war
 - the check errors, and whether the reply was accepted or arrived late,
 - for a revision, the fields the reviewer asked to change, the fields that actually changed, and any requested field left unchanged.
 
-The trace holds fingerprints, never the brief or reply text, so it can be logged without copying the user's details. Matching fingerprints show when a value passed through a step unchanged.
+The trace is meant to be safe to log, so it only keeps text this code wrote:
+
+- Field names from the contracts (brief, content plan, design plan, review, task). Any other field name, such as one an agent made up, becomes `field#<fingerprint>`.
+- Error messages from a fixed list of the messages our checks produce. Parts of a message that come from input are fingerprinted: unknown field names, non-built-in exception names (`exception#…`), and tag, attribute, or section names from a generated page. A message not on the list becomes `unrecognized error #<fingerprint>`.
+- For a `needs_input` result, the agent's questions appear as `question#<fingerprint>`. The caller still gets the real questions in `errors`.
+- Warnings appear as field, code, and pattern id, never the matched text.
+
+`tests/test_trace.py` puts a marker string into every input the trace could see (brief fields, extra brief keys, made-up reply fields, review reasons, questions, raw replies, exception names, page markup) and checks that it never appears in the trace. Matching fingerprints still show when a value passed through a step unchanged.
 
 `python3 -m sitestarter.trace_demo --brief examples/bakery-brief.json --cases examples/eval-cases.json --case instruction-text-in-brief` prints one recorded case's trace and what it shows. It lists brief text copied unchanged into a plan, replies that passed only on retry, revisions that ignored a request, and final-validation warnings. `--json` prints the raw trace. These are recorded replies, not live AI.
 
 ## Final-validation warnings
 
-Final validation now returns a `warnings` list on a ready page when the business name, purpose, about text, or contact looks like an instruction to an AI ("ignore all previous rules…") or like markup (`<script>`, `onerror=`, `javascript:`). It is one warning per field. These don't block the page, because the builder escapes text and nothing runs. Warnings are only returned with a ready page. They stay visible in the trace if the run fails.
+Final validation now returns a `warnings` list on a ready page when the business name, purpose, about text, or contact looks like an instruction to an AI ("ignore all previous rules…") or like markup (`<script>`, `onerror=`, `javascript:`). It is one warning per field. Each warning has `field`, `code`, `pattern` (a fixed id such as `ignore_previous`), and `match`. `match` is the user's own matched text, there so the interface can show them where the problem is. It is never copied into the trace, so don't log the `warnings` list itself. These warnings don't block the page, because the builder escapes text and nothing runs. Warnings are only returned with a ready page. Their field, code, and pattern stay visible in the trace if the run fails.
 
 Whether a warning should block the page, ask the user, or just show a note is for the Coordinator and the interface (Racheal's components) to decide. This change only reports it. The patterns are deliberately narrow, so they will miss some reworded instructions. They are a flag for a person, not a security boundary.
 
