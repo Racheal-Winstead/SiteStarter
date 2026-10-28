@@ -108,14 +108,18 @@ def check_final_html(html, brief):
 # Text that reads like orders to an AI system or like markup. The builder
 # escapes it, so nothing runs, but a business owner would not usually write
 # it, and nothing else in the run tells them it ended up on their page.
+# Each pattern has a fixed id. Logs and traces record the id, never the matched text.
 INSTRUCTION_LIKE = [
-    re.compile(r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}"
-               r"\b(rules|instructions|prompts?|directions)\b", re.IGNORECASE),
-    re.compile(r"\b(system prompt|developer message|you are now|act as an?|jailbreak)\b", re.IGNORECASE),
-    re.compile(r"<\s*/?\s*(script|iframe|img|svg|object|embed|style|link)\b", re.IGNORECASE),
-    re.compile(r"\bon(error|load|click|mouseover)\s*=", re.IGNORECASE),
-    re.compile(r"\bjavascript\s*:", re.IGNORECASE),
+    ("ignore_previous", re.compile(
+        r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}"
+        r"\b(rules|instructions|prompts?|directions)\b", re.IGNORECASE)),
+    ("role_override", re.compile(
+        r"\b(system prompt|developer message|you are now|act as an?|jailbreak)\b", re.IGNORECASE)),
+    ("html_tag", re.compile(r"<\s*/?\s*(script|iframe|img|svg|object|embed|style|link)\b", re.IGNORECASE)),
+    ("event_handler", re.compile(r"\bon(error|load|click|mouseover)\s*=", re.IGNORECASE)),
+    ("javascript_url", re.compile(r"\bjavascript\s*:", re.IGNORECASE)),
 ]
+PATTERN_IDS = frozenset(pattern_id for pattern_id, _ in INSTRUCTION_LIKE)
 WARN_FIELDS = ("name", "purpose", "about", "contact")
 
 
@@ -133,10 +137,12 @@ def find_instruction_like_text(page_facts):
         value = page_facts.get(field)
         if not isinstance(value, str):
             continue
-        for pattern in INSTRUCTION_LIKE:
+        for pattern_id, pattern in INSTRUCTION_LIKE:
             match = pattern.search(value)
             if match:
+                # "match" is the user's own text, for showing them where the problem is.
+                # It is for the interface only; the trace keeps field, code and pattern.
                 warnings.append({"field": field, "code": "instruction_like_text",
-                                 "match": match.group(0)[:60]})
+                                 "pattern": pattern_id, "match": match.group(0)[:60]})
                 break
     return warnings
