@@ -94,7 +94,7 @@ The trace is meant to be safe to log, so it only keeps text this code wrote:
 - For a `needs_input` result, the agent's questions appear as `question#<fingerprint>`. The caller still gets the real questions in `errors`.
 - Warnings appear as field, code, and pattern id, never the matched text.
 
-`tests/test_trace.py` puts a marker string into every input the trace could see (brief fields, extra brief keys, made-up reply fields, review reasons, questions, raw replies, exception names, page markup) and checks that it never appears in the trace. Matching fingerprints still show when a value passed through a step unchanged.
+`tests/test_trace.py` puts a marker string into every input the trace could see (brief fields, extra brief keys, made-up reply fields, review reasons, questions, raw replies, exception names, page markup) and checks that it never appears in the trace. Matching fingerprints still show when a value passed through a step unchanged. The trace holds no model reasoning. A matching fingerprint shows that a value was passed on unchanged and that the handoff accepted it. It can't show whether an agent reasoned well, and with recorded replies there is no reasoning to judge.
 
 `python3 -m sitestarter.trace_demo --brief examples/bakery-brief.json --cases examples/eval-cases.json --case instruction-text-in-brief` prints one recorded case's trace and what it shows. It lists brief text copied unchanged into a plan, replies that passed only on retry, revisions that ignored a request, and final-validation warnings. `--json` prints the raw trace. These are recorded replies, not live AI.
 
