@@ -4,7 +4,7 @@
         --cases examples/eval-cases.json --case instruction-text-in-brief
 
 Each line is one event from run_planning_loop's trace: what was sent, what
-came back (field fingerprints and lengths, never the text itself), the check
+came back (field fingerprints and lengths, never the user's or agent's text), the check
 errors, and whether it was accepted. It then lists what the trace shows:
 - brief fields that reached a plan unchanged (same fingerprint)
 - replies a retry hid (rejected first, accepted second)
@@ -57,7 +57,7 @@ def _line(event):
     if event.get("errors"):
         line += " | " + "; ".join(event["errors"])
     if event.get("warnings"):
-        line += " | warnings: " + "; ".join(f"{w['field']}: {w['code']} ({w['match']!r})"
+        line += " | warnings: " + "; ".join(f"{w['field']}: {w['code']} ({w['pattern']})"
                                            for w in event["warnings"])
     return line
 
@@ -84,7 +84,7 @@ def findings(trace):
     for event in trace:
         for warning in event.get("warnings", []) if event["event"] == "final_checks" else []:
             notes.append(f"#{event['seq']}: final validation warning on {warning['field']}: "
-                         f"{warning['code']} ({warning['match']!r})")
+                         f"{warning['code']} ({warning['pattern']})")
     return notes
 
 
