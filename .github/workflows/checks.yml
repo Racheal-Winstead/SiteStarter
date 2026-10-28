@@ -26,3 +26,5 @@ jobs:
         run: python -m sitestarter.handoff_demo --brief examples/bakery-brief.json --model-response examples/bakery-design.json
       - name: Content-design review loop demo
         run: python -m sitestarter.loop_demo --brief examples/bakery-brief.json --replies examples/bakery-loop-replies.json
+      - name: Score the review loop on recorded cases
+        run: python -m sitestarter.eval_loop --brief examples/bakery-brief.json --cases examples/eval-cases.json

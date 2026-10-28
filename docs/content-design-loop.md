@@ -66,6 +66,16 @@ Built and tested on `sam-h-content-design-loop`:
 - `python3 -m sitestarter.loop_demo`: runs the loop offline with recorded replies (`examples/bakery-loop-replies.json`). The replies are hand-written stand-ins for model output, not live AI.
 - `tests/test_planning_loop.py`: 34 tests with scripted agents.
 
+## Scoring the loop
+
+`python3 -m sitestarter.eval_loop --brief examples/bakery-brief.json --cases examples/eval-cases.json` runs 13 recorded cases (`examples/eval-cases.json`) and reports the three multi-agent eval dimensions:
+
+- **End-to-end success:** the share of cases that ended as expected. Ready cases must return a page. Failure cases must stop at the expected stage with no page.
+- **Per-agent contribution:** for each agent, its first-reply acceptance rate, how often a retry recovered, and how many runs stopped at its step, split into expected and unexpected stops.
+- **Handoff success:** the share of replies accepted at each handoff (agent and step), plus pass rates for the final plan gate and the final page checks when a run reached them.
+
+The command exits 1 if any case ends differently than expected, and CI runs it. Most of the cases are deliberately bad replies, so the per-agent and handoff rates show that the checks catch them. They are not a measure of model quality. The replies are recorded and hand-written, not live AI. Real rates need live runs once the key is set up.
+
 Not built yet:
 - A live model call for either agent (the API key is still deferred).
 - Racheal's Content Agent and Coordinator. In this code the content agent is any function that returns text.

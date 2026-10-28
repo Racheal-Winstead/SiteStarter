@@ -1,0 +1,136 @@
+{
+  "_note": "Recorded cases for python3 -m sitestarter.eval_loop. Every reply is hand-written, not live AI. A plan step changes fields of the base plan; a review step needs its round. expect is how the run should end.",
+  "base": {
+    "content_plan": {
+      "request_id": "demo-bakery-001",
+      "agent_name": "content_agent",
+      "status": "complete",
+      "heading": "Fresh bread for local families",
+      "about_text": "This fictional bakery is a sample for trying SiteStarter. Replace this text with your own approved business description before sharing your page.",
+      "contact": "hello@example.com",
+      "missing_information": [],
+      "warnings": []
+    },
+    "design_plan": {
+      "request_id": "demo-bakery-001",
+      "agent_name": "design_agent",
+      "status": "complete",
+      "colors": {"background": "#FFF8EE", "text": "#3B2412", "accent": "#8B5A2B"},
+      "typography": {"heading_font": "Georgia", "body_font": "system-ui", "base_size_px": 18},
+      "section_order": ["heading", "about", "contact"],
+      "spacing": {"section_gap_px": 48, "max_width_px": 1000},
+      "responsive_rules": {"breakpoint_px": 600, "mobile_layout": "single_column"},
+      "warnings": []
+    }
+  },
+  "cases": [
+    {
+      "id": "agree-first-round",
+      "description": "Both plans pass and both agents agree in round 1.",
+      "content_agent": [{"plan": {}}, {"review": "agree", "round": 1}],
+      "design_agent": [{"plan": {}}, {"review": "agree", "round": 1}],
+      "expect": {"status": "ready", "stage": "done"}
+    },
+    {
+      "id": "design-asks-shorter-heading",
+      "description": "Design asks for a shorter heading; content revises; both agree in round 2.",
+      "content_agent": [{"plan": {}}, {"review": "agree", "round": 1}, {"plan": {"heading": "Fresh bread"}},
+                        {"review": "agree", "round": 2}],
+      "design_agent": [{"plan": {}},
+                       {"review": "revise", "round": 1, "requests": [{"target_field": "heading", "reason": "Shorter so it fits on a phone."}]},
+                       {"review": "agree", "round": 2}],
+      "expect": {"status": "ready", "stage": "done"}
+    },
+    {
+      "id": "content-asks-for-different-font",
+      "description": "Content asks design to change typography; design revises; both agree in round 2.",
+      "content_agent": [{"plan": {}},
+                        {"review": "revise", "round": 1, "requests": [{"target_field": "typography", "reason": "Use a plainer body font."}]},
+                        {"review": "agree", "round": 2}],
+      "design_agent": [{"plan": {}}, {"review": "agree", "round": 1},
+                       {"plan": {"typography": {"heading_font": "Georgia", "body_font": "Verdana", "base_size_px": 18}}},
+                       {"review": "agree", "round": 2}],
+      "expect": {"status": "ready", "stage": "done"}
+    },
+    {
+      "id": "changed-contact-then-fixed",
+      "description": "First content plan changes the contact; the retry keeps it exact.",
+      "content_agent": [{"plan": {"contact": "sales@example.com"}}, {"plan": {}}, {"review": "agree", "round": 1}],
+      "design_agent": [{"plan": {}}, {"review": "agree", "round": 1}],
+      "expect": {"status": "ready", "stage": "done"}
+    },
+    {
+      "id": "not-json-then-valid-review",
+      "description": "Design's first review is not JSON; the retry is valid.",
+      "content_agent": [{"plan": {}}, {"review": "agree", "round": 1}],
+      "design_agent": [{"plan": {}}, {"raw": "Looks good to me!"}, {"review": "agree", "round": 1}],
+      "expect": {"status": "ready", "stage": "done"}
+    },
+    {
+      "id": "changed-contact-twice",
+      "description": "Content changes the contact on both attempts; the run stops before design runs.",
+      "content_agent": [{"plan": {"contact": "sales@example.com"}}, {"plan": {"contact": "sales@example.com"}}],
+      "design_agent": [],
+      "expect": {"status": "failed", "stage": "content_agent:plan"}
+    },
+    {
+      "id": "list-target-field-twice",
+      "description": "Design asks to change a list instead of a field name twice (Codex probe 1).",
+      "content_agent": [{"plan": {}}],
+      "design_agent": [{"plan": {}},
+                       {"review": "revise", "round": 1, "requests": [{"target_field": [], "reason": "shorter"}]},
+                       {"review": "revise", "round": 1, "requests": [{"target_field": [], "reason": "shorter"}]}],
+      "expect": {"status": "failed", "stage": "design_agent:review"}
+    },
+    {
+      "id": "out-of-role-request-twice",
+      "description": "Design asks content to change the contact details, which it may not do.",
+      "content_agent": [{"plan": {}}],
+      "design_agent": [{"plan": {}},
+                       {"review": "revise", "round": 1, "requests": [{"target_field": "contact", "reason": "Use a sales address."}]},
+                       {"review": "revise", "round": 1, "requests": [{"target_field": "contact", "reason": "Use a sales address."}]}],
+      "expect": {"status": "failed", "stage": "design_agent:review"}
+    },
+    {
+      "id": "never-agree",
+      "description": "Design keeps asking for heading changes for all three rounds.",
+      "content_agent": [{"plan": {}}, {"review": "agree", "round": 1}, {"plan": {}}, {"review": "agree", "round": 2},
+                        {"plan": {}}, {"review": "agree", "round": 3}],
+      "design_agent": [{"plan": {}},
+                       {"review": "revise", "round": 1, "requests": [{"target_field": "heading", "reason": "Shorter."}]},
+                       {"review": "revise", "round": 2, "requests": [{"target_field": "heading", "reason": "Shorter."}]},
+                       {"review": "revise", "round": 3, "requests": [{"target_field": "heading", "reason": "Shorter."}]}],
+      "expect": {"status": "failed", "stage": "review_loop"}
+    },
+    {
+      "id": "content-needs-input",
+      "description": "Content cannot write the page without the opening hours.",
+      "content_agent": [{"plan": {"status": "needs_input", "heading": null, "missing_information": ["What hours is the bakery open?"]}}],
+      "design_agent": [],
+      "expect": {"status": "needs_input", "stage": "content_agent:plan"}
+    },
+    {
+      "id": "model-errors-twice",
+      "description": "The design agent's model call fails on both attempts.",
+      "content_agent": [{"plan": {}}],
+      "design_agent": [{"error": "TimeoutError"}, {"error": "ConnectionError"}],
+      "expect": {"status": "failed", "stage": "design_agent:plan"}
+    },
+    {
+      "id": "low-contrast-colors-twice",
+      "description": "Design picks colors that fail the contrast check on both attempts.",
+      "content_agent": [{"plan": {}}],
+      "design_agent": [{"plan": {"colors": {"background": "#FFFFFF", "text": "#EEEEEE", "accent": "#8B5A2B"}}},
+                       {"plan": {"colors": {"background": "#FFFFFF", "text": "#EEEEEE", "accent": "#8B5A2B"}}}],
+      "expect": {"status": "failed", "stage": "design_agent:plan"}
+    },
+    {
+      "id": "brief-missing-contact",
+      "description": "The brief has no contact, so no agent runs.",
+      "brief_changes": {"contact": ""},
+      "content_agent": [],
+      "design_agent": [],
+      "expect": {"status": "failed", "stage": "brief"}
+    }
+  ]
+}
