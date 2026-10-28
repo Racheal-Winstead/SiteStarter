@@ -425,8 +425,14 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
             shown = [f"question#{_digest(q)}" for q in errors]
         else:
             shown = _trace_errors(errors)
-        emit({"event": "result", "status": status, "stage": stage, "errors": shown})
-        return result(status, stage, errors, html)
+        returned = result(status, stage, errors, html)
+        event = {"event": "result", "status": status, "stage": stage, "errors": shown}
+        if returned["warnings"]:
+            # What was handed back with the page, so a trace shows the warning reached
+            # the result and not only final checks. Field, code and pattern id, never the text.
+            event["warnings"] = [{k: w[k] for k in ("field", "code", "pattern")} for w in returned["warnings"]]
+        emit(event)
+        return returned
 
     def revise(agent_name, agent, task, check, old_plan):
         """Run a revision and record which requested fields it actually changed."""
