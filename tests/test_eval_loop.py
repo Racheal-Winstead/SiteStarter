@@ -100,11 +100,23 @@ class ScoringTests(unittest.TestCase):
         self.assertFalse(run["matched"])
         self.assertTrue(run["has_page"])
 
+    def test_expected_warnings_must_match(self):
+        steps = dict(content_agent=[{"plan": {}}, {"review": "agree", "round": 1}],
+                     design_agent=[{"plan": {}}, {"review": "agree", "round": 1}])
+        wanted = one_case(expect={"status": "ready", "stage": "done", "warnings": ["about"]}, **steps)
+        self.assertFalse(run_case(load_cases(wanted, BRIEF)[0])["matched"])
+        none = one_case(expect={"status": "ready", "stage": "done", "warnings": []}, **steps)
+        self.assertTrue(run_case(load_cases(none, BRIEF)[0])["matched"])
+        bad = one_case(expect={"status": "ready", "stage": "done", "warnings": "about"}, **steps)
+        with self.assertRaises(CaseError):
+            load_cases(bad, BRIEF)
+
     def test_a_failed_run_that_still_returns_a_page_is_a_miss(self):
         import sitestarter.eval_loop as eval_loop
         original = eval_loop.run_planning_loop
         eval_loop.run_planning_loop = lambda brief, content, design: {
-            "status": "failed", "stage": "review_loop", "errors": [], "calls": [], "html": "<p>leaked</p>"}
+            "status": "failed", "stage": "review_loop", "errors": [], "calls": [], "html": "<p>leaked</p>",
+            "warnings": [], "trace": []}
         try:
             data = one_case(expect={"status": "failed", "stage": "review_loop"})
             run = run_case(load_cases(data, BRIEF)[0])
