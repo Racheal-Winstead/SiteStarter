@@ -36,12 +36,13 @@ Agents run one after another in this code; running the first two plans at
 the same time is Coordinator work.
 """
 
+import hashlib
 import json
 import time
 
 from .builder import BuildError, build_site, validate_brief
 from .design_agent import MAX_DEPTH, _nesting_depth, validate_design_plan
-from .final_checks import check_final_html
+from .final_checks import check_final_html, find_instruction_like_text
 
 CONTENT_AGENT = "content_agent"
 DESIGN_AGENT = "design_agent"
@@ -176,6 +177,27 @@ def _parse(raw):
         return None
 
 
+def _digest(value):
+    """Short fingerprint, so a trace shows what moved between steps without copying user text."""
+    try:
+        data = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    except (TypeError, ValueError, RecursionError):
+        data = f"<unserializable {type(value).__name__}>"
+    return hashlib.sha256(data.encode("utf-8", "surrogatepass")).hexdigest()[:12]
+
+
+def _field_digests(value):
+    if not isinstance(value, dict):
+        return None
+    return {str(key): _digest(item) for key, item in sorted(value.items(), key=lambda kv: str(kv[0]))}
+
+
+def _changed_fields(old, new):
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return []
+    return sorted(k for k in set(old) | set(new) if old.get(k) != new.get(k))
+
+
 def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
                       deadline_seconds=DEADLINE_SECONDS):
     """Run plans -> review rounds -> final plan gate -> build -> final checks.
@@ -183,8 +205,19 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
     content_agent(task) and design_agent(task) return raw model text. Each task
     is a dict with kind ("plan", "review", or "revise"), request_id, the brief,
     and what that step needs. Returns a dict; html is set only when ready.
+
+    The result also has "trace" (one event per check and agent call, in
+    order; agent text appears only as fingerprints and lengths) and
+    "warnings" (non-blocking notes from final validation on a ready page).
     """
     log = []
+    trace = []
+    warnings = []
+
+    def emit(event):
+        event["seq"] = len(trace) + 1
+        trace.append(event)
+        return event
     started = clock()
     state = {"content": None, "design": None, "rounds": 0}
 
@@ -197,27 +230,36 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
             check_deadline("before an agent call")
             entry = {"agent": agent_name, "kind": task["kind"], "round": task.get("round", 0),
                      "attempt": attempt}
+            event = {"event": "agent_call", "agent": agent_name, "kind": task["kind"],
+                     "round": task.get("round", 0), "attempt": attempt,
+                     "sent": {"fields": sorted(k for k in task if k != "brief"), "digest": _digest(task)},
+                     "received": None}
             try:
                 raw = agent(task)
             except Exception as exc:  # provider errors and timeouts use the attempt
                 errors = [f"model call failed: {type(exc).__name__}"]
             else:
+                event["received"] = {"chars": len(raw) if isinstance(raw, str) else None,
+                                     "digest": _digest(raw), "json": False}
                 if clock() - started > deadline_seconds:
                     # A reply that arrives after the deadline is discarded, never used.
                     entry.update(accepted=False, late=True)
                     log.append(entry)
-                    raise _Stop("failed", "timed_out", [
-                        f"{agent_name} replied after the {deadline_seconds}s deadline; reply discarded"])
+                    message = f"{agent_name} replied after the {deadline_seconds}s deadline; reply discarded"
+                    emit(dict(event, accepted=False, late=True, errors=[message]))
+                    raise _Stop("failed", "timed_out", [message])
                 value = _parse(raw)
                 if value is None:
                     errors = ["response was not valid JSON"]
                 else:
+                    event["received"].update(json=True, fields=_field_digests(value))
                     try:
                         errors = check(value)
                     except Exception as exc:  # a check must never crash the run
                         errors = [f"response could not be checked: {type(exc).__name__}"]
             entry["accepted"] = not errors
             log.append(entry)
+            emit(dict(event, accepted=not errors, errors=list(errors)))
             if not errors:
                 return value
             task = dict(task, errors=errors)
@@ -242,11 +284,27 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
         return {"request_id": brief.get("request_id") if isinstance(brief, dict) else None,
                 "status": status, "stage": stage, "errors": list(errors),
                 "rounds": state["rounds"], "content_plan": state["content"],
-                "design_plan": state["design"], "html": html, "calls": log}
+                "design_plan": state["design"], "html": html, "calls": log,
+                "trace": trace, "warnings": list(warnings) if html is not None else []}
+
+    def finish(status, stage, errors, html=None):
+        emit({"event": "result", "status": status, "stage": stage, "errors": list(errors)})
+        return result(status, stage, errors, html)
+
+    def revise(agent_name, agent, task, check, old_plan):
+        """Run a revision and record which requested fields it actually changed."""
+        new_plan = call(agent_name, agent, task, check)
+        requested = sorted({r["target_field"] for r in task["requests"]})
+        changed = _changed_fields(old_plan, new_plan)
+        trace[-1].update(requested_fields=requested, changed_fields=changed,
+                         ignored_requests=sorted(set(requested) - set(changed)))
+        return new_plan
 
     errors = validate_brief(brief)
+    emit({"event": "brief_check", "passed": not errors, "errors": list(errors),
+          "fields": _field_digests(brief)})
     if errors:
-        return result("failed", "brief", errors)
+        return finish("failed", "brief", errors)
 
     try:
         base = {"request_id": brief["request_id"], "brief": brief}
@@ -269,20 +327,21 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
                 raise _Stop("failed", "review_loop", [
                     f"content and design plans did not agree after {MAX_REVIEW_ROUNDS} rounds"])
             if design_review["verdict"] == "revise":
-                state["content"] = accept_plan(CONTENT_AGENT, call(CONTENT_AGENT, content_agent, dict(
+                state["content"] = accept_plan(CONTENT_AGENT, revise(CONTENT_AGENT, content_agent, dict(
                     base, kind="revise", round=round_number, plan=state["content"],
-                    requests=design_review["requests"]), content_check))
+                    requests=design_review["requests"]), content_check, state["content"]))
             if content_review["verdict"] == "revise":
-                state["design"] = accept_plan(DESIGN_AGENT, call(DESIGN_AGENT, design_agent, dict(
+                state["design"] = accept_plan(DESIGN_AGENT, revise(DESIGN_AGENT, design_agent, dict(
                     base, kind="revise", round=round_number, plan=state["design"],
-                    requests=content_review["requests"]), design_check))
+                    requests=content_review["requests"]), design_check, state["design"]))
         check_deadline("before the final plan gate")
     except _Stop as stop:
-        return result(stop.status, stop.stage, stop.errors)
+        return finish(stop.status, stop.stage, stop.errors)
 
     errors = final_plan_gate(brief, state["content"], state["design"])
+    emit({"event": "plan_gate", "passed": not errors, "errors": list(errors)})
     if errors:
-        return result("failed", "plan_gate", errors)
+        return finish("failed", "plan_gate", errors)
 
     content = state["content"]
     page_facts = {"request_id": brief["request_id"], "name": brief["name"],
@@ -292,14 +351,19 @@ def run_planning_loop(brief, content_agent, design_agent, clock=time.monotonic,
         check_deadline("before building")
         html = build_site(page_facts, state["design"])
     except BuildError as exc:
-        return result("failed", "build", [str(exc)])
+        emit({"event": "build", "passed": False, "errors": [str(exc)]})
+        return finish("failed", "build", [str(exc)])
     except _Stop as stop:
-        return result(stop.status, stop.stage, stop.errors)
+        return finish(stop.status, stop.stage, stop.errors)
+    emit({"event": "build", "passed": True, "errors": [], "html_digest": _digest(html)})
     errors = check_final_html(html, page_facts)
+    warnings.extend(find_instruction_like_text(page_facts))
+    emit({"event": "final_checks", "passed": not errors, "errors": list(errors),
+          "warnings": [dict(w) for w in warnings]})
     if errors:
-        return result("failed", "final_checks", errors)
+        return finish("failed", "final_checks", errors)
     try:
         check_deadline("before returning the page")
     except _Stop as stop:
-        return result(stop.status, stop.stage, stop.errors)
-    return result("ready", "done", [], html=html)
+        return finish(stop.status, stop.stage, stop.errors)
+    return finish("ready", "done", [], html=html)
