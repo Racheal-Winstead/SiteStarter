@@ -64,17 +64,38 @@ Three review rounds means at most two revision cycles. Worst case with no retrie
 Built and tested on `sam-h-content-design-loop`:
 - `sitestarter/planning_loop.py`: the loop, all handoff checks above, the round cap, the deadline check, the final plan gate, the builder call, and the final page checks.
 - `python3 -m sitestarter.loop_demo`: runs the loop offline with recorded replies (`examples/bakery-loop-replies.json`). The replies are hand-written stand-ins for model output, not live AI.
-- `tests/test_planning_loop.py`: 34 tests with scripted agents.
+- `tests/test_planning_loop.py`: 34 tests with scripted agents. `tests/test_trace.py`: 23 tests for the trace, the warnings, and the trace command.
 
 ## Scoring the loop
 
-`python3 -m sitestarter.eval_loop --brief examples/bakery-brief.json --cases examples/eval-cases.json` runs 13 recorded cases (`examples/eval-cases.json`) and reports the three multi-agent eval dimensions:
+`python3 -m sitestarter.eval_loop --brief examples/bakery-brief.json --cases examples/eval-cases.json` runs 14 recorded cases (`examples/eval-cases.json`) and reports the three multi-agent eval dimensions:
 
 - **End-to-end success:** the share of cases that ended as expected. Ready cases must return a page. Failure cases must stop at the expected stage with no page.
 - **Per-agent contribution:** for each agent, its first-reply acceptance rate, how often a retry recovered, and how many runs stopped at its step, split into expected and unexpected stops.
 - **Handoff success:** the share of replies accepted at each handoff (agent and step), plus pass rates for the final plan gate and the final page checks when a run reached them.
 
 The command exits 1 if any case ends differently than expected, and CI runs it. Most of the cases are deliberately bad replies, so the per-agent and handoff rates show that the checks catch them. They are not a measure of model quality. The replies are recorded and hand-written, not live AI. Real rates need live runs once the key is set up.
+
+A case can also list the fields it expects final validation to warn about (`"warnings": ["about"]`). The run must match that list exactly.
+
+## Tracing a run
+
+`run_planning_loop` also returns a `trace`, with one event per step in order: the brief check, every agent call, the plan gate, the build, the final checks, and the result. The existing `calls` list is unchanged. An agent call event records:
+
+- what was sent (the task's field names and a fingerprint),
+- what came back (length, whether it was JSON, and a fingerprint for each top-level field),
+- the check errors, and whether the reply was accepted or arrived late,
+- for a revision, the fields the reviewer asked to change, the fields that actually changed, and any requested field left unchanged.
+
+The trace holds fingerprints, never the brief or reply text, so it can be logged without copying the user's details. Matching fingerprints show when a value passed through a step unchanged.
+
+`python3 -m sitestarter.trace_demo --brief examples/bakery-brief.json --cases examples/eval-cases.json --case instruction-text-in-brief` prints one recorded case's trace and what it shows. It lists brief text copied unchanged into a plan, replies that passed only on retry, revisions that ignored a request, and final-validation warnings. `--json` prints the raw trace. These are recorded replies, not live AI.
+
+## Final-validation warnings
+
+Final validation now returns a `warnings` list on a ready page when the business name, purpose, about text, or contact looks like an instruction to an AI ("ignore all previous rules…") or like markup (`<script>`, `onerror=`, `javascript:`). It is one warning per field. These don't block the page, because the builder escapes text and nothing runs. Warnings are only returned with a ready page. They stay visible in the trace if the run fails.
+
+Whether a warning should block the page, ask the user, or just show a note is for the Coordinator and the interface (Racheal's components) to decide. This change only reports it. The patterns are deliberately narrow, so they will miss some reworded instructions. They are a flag for a person, not a security boundary.
 
 Not built yet:
 - A live model call for either agent (the API key is still deferred).
