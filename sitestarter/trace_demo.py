@@ -9,7 +9,7 @@ errors, and whether it was accepted. It then lists what the trace shows:
 - brief fields that reached a plan unchanged (same fingerprint)
 - replies a retry hid (rejected first, accepted second)
 - revisions that left a requested field unchanged
-- warnings from final validation
+- warnings from final validation, and whether they reached the result
 
 The replies come from the recorded cases file, not a live model.
 """
@@ -51,7 +51,10 @@ def _line(event):
             line += (f" | asked to change {event['requested_fields']}, changed {event['changed_fields']}")
         return line
     if kind == "result":
-        return f"{seq} result: {event['status']}/{event['stage']}"
+        line = f"{seq} result: {event['status']}/{event['stage']}"
+        if event.get("warnings"):
+            line += " | returned with warnings on " + ", ".join(w["field"] for w in event["warnings"])
+        return line
     status = "passed" if event.get("passed") else "FAILED"
     line = f"{seq} {kind}: {status}"
     if event.get("errors"):
@@ -85,6 +88,18 @@ def findings(trace):
         for warning in event.get("warnings", []) if event["event"] == "final_checks" else []:
             notes.append(f"#{event['seq']}: final validation warning on {warning['field']}: "
                          f"{warning['code']} ({warning['pattern']})")
+    checks = next((e for e in trace if e["event"] == "final_checks"), None)
+    final = next((e for e in trace if e["event"] == "result"), None)
+    raised = sorted(w["field"] for w in (checks or {}).get("warnings", []))
+    returned = sorted(w["field"] for w in (final or {}).get("warnings", []))
+    # Only a ready page is returned with warnings; a failed run has no page to warn about.
+    if raised and final is not None and final["status"] == "ready":
+        if returned == raised:
+            notes.append(f"#{final['seq']}: the warnings on {raised} reached the result handed to the interface")
+        else:
+            lost = sorted(set(raised) - set(returned))
+            notes.append(f"#{final['seq']}: final validation warned on {raised}, but the result carries "
+                         f"{returned or 'none'}; the warnings on {lost} did not reach the interface")
     return notes
 
 

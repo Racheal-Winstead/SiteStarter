@@ -109,12 +109,26 @@ def check_final_html(html, brief):
 # escapes it, so nothing runs, but a business owner would not usually write
 # it, and nothing else in the run tells them it ended up on their page.
 # Each pattern has a fixed id. Logs and traces record the id, never the matched text.
+#
+# The patterns are scored in examples/warning-cases.json (python -m
+# sitestarter.warning_eval): reworded instructions they should catch, and
+# ordinary business text they should leave alone. They are deliberately narrow
+# and will still miss some rewordings. They flag text for a person to look at.
+# They are not a security boundary; escaping is.
+_SET_ASIDE = (r"(ignore|disregard|forget|override|bypass|skip|"
+              r"pay\s+no\s+(attention|mind|heed)\s+to|"
+              r"(do\s+not|don'?t|stop|no\s+longer)\s+(follow(ing)?|obey(ing)?|listen(ing)?\s+to))")
+_EARLIER = r"(previous|prior|above|earlier|preceding|original|all|any|your|those|these)"
+_ORDERS = r"(rules|instructions|prompts?|guidance|guidelines|orders|commands|directives|system\s+message)"
 INSTRUCTION_LIKE = [
     ("ignore_previous", re.compile(
-        r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}"
-        r"\b(rules|instructions|prompts?|directions)\b", re.IGNORECASE)),
+        rf"\b{_SET_ASIDE}\b[^.\n]{{0,40}}\b{_EARLIER}\b[^.\n]{{0,20}}\b{_ORDERS}\b", re.IGNORECASE)),
+    ("new_instructions", re.compile(
+        r"\b((new|updated|real|actual|hidden)\s+(instructions|task|system\s+prompt)\s*[:\-]|"
+        r"from\s+now\s+on,?\s+(you|your\s+(job|task|role))\b)", re.IGNORECASE)),
     ("role_override", re.compile(
-        r"\b(system prompt|developer message|you are now|act as an?|jailbreak)\b", re.IGNORECASE)),
+        r"\b(system prompt|developer message|you are now|act as an?\s+(ai|assistant|admin|unrestricted|different)|jailbreak|"
+        r"pretend\s+(to\s+be|you\s+are)|you\s+must\s+now|as\s+an\s+ai\s+(model|assistant))\b", re.IGNORECASE)),
     ("html_tag", re.compile(r"<\s*/?\s*(script|iframe|img|svg|object|embed|style|link)\b", re.IGNORECASE)),
     ("event_handler", re.compile(r"\bon(error|load|click|mouseover)\s*=", re.IGNORECASE)),
     ("javascript_url", re.compile(r"\bjavascript\s*:", re.IGNORECASE)),
