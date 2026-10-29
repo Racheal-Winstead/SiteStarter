@@ -5,6 +5,60 @@
   const steps = [...root.querySelectorAll('[data-step]')];
   let step = 0;
   let submitting = false;
+  let activeRun = null;
+  let revision = null;
+  let pollTimer = null;
+
+  function runError(message) {
+    $('#ss-run-error').textContent = message;
+    $('#ss-run-error').hidden = false;
+  }
+
+  function renderRun(result) {
+    revision = result.revision;
+    $('#ss-run-status').textContent = {
+      running:'Planning and reviewing your recorded draft…',
+      review_required:'Review required — preview and download are withheld.',
+      ready:'Ready — final checks and any required review have passed.',
+      failed:'The run stopped. No output is available.',
+      needs_input:'More information is needed. Edit your details and submit a new run.',
+      timed_out:'The run timed out. No output is available.'
+    }[result.status] || 'Run unavailable.';
+    $('#ss-run-events').replaceChildren();
+    result.events.forEach(event => { const item = document.createElement('li'); item.textContent = event; $('#ss-run-events').append(item); });
+    const review = result.status === 'review_required';
+    $('#ss-review-gate').hidden = !review;
+    $('#ss-run-warnings').replaceChildren();
+    if (review) result.warnings.forEach(warning => {
+      const label = document.createElement('h3'); label.textContent = warning.field;
+      const passage = document.createElement('p'); passage.textContent = warning.passage;
+      $('#ss-run-warnings').append(label, passage);
+    });
+    const ready = result.status === 'ready';
+    $('#ss-output').hidden = !ready;
+    if (ready) {
+      const path = '/api/runs/' + encodeURIComponent(activeRun);
+      if (!$('#ss-frame').hasAttribute('src')) $('#ss-frame').src = path + '/preview';
+      $('#ss-download').href = path + '/download';
+    } else {
+      $('#ss-frame').removeAttribute('src');
+      $('#ss-download').removeAttribute('href');
+    }
+  }
+
+  async function poll(rid) {
+    if (rid !== activeRun) return;
+    try {
+      const response = await fetch('/api/runs/' + encodeURIComponent(rid), {cache:'no-store'});
+      if (!response.ok) throw new Error('Unavailable run');
+      const result = await response.json();
+      if (rid !== activeRun) return;
+      renderRun(result);
+      if (result.status === 'running') pollTimer = setTimeout(() => poll(rid), 400);
+    } catch {
+      if (rid === activeRun) runError('Could not retrieve this run. It may have expired or the server may have restarted. Edit your details to start again.');
+    }
+  }
 
   function clearErrors() {
     Object.values(fields).forEach(field => {
@@ -87,22 +141,42 @@
     submit.disabled = true;
     submit.textContent = 'Checking your details…';
     try {
-      const response = await fetch('/api/brief', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.value])))});
+      const response = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.value])))});
       const result = await response.json();
       if (response.status === 422 && result.field_errors) { showErrors(result.field_errors); return; }
-      if (!response.ok || result.status !== 'accepted' || typeof result.request_id !== 'string') throw new Error('Unexpected validation response');
+      if (!response.ok || result.status !== 'running' || typeof result.request_id !== 'string') throw new Error('Unexpected run response');
+      activeRun = result.request_id;
+      revision = null;
+      $('#ss-run-error').hidden = true;
+      $('#ss-output').hidden = true;
+      $('#ss-review-gate').hidden = true;
+      $('#ss-frame').removeAttribute('src');
+      $('#ss-run-events').replaceChildren();
+      $('#ss-run-status').textContent = 'Recorded-response run started…';
       $('#ss-request-id').textContent = result.request_id;
       $('#ss-form').hidden = true;
       $('#ss-run').hidden = false;
+      poll(activeRun);
     } catch {
       showErrors({_form:'We couldn’t check your brief. Make sure the local server is running and try again. Your answers are preserved.'});
     } finally {
       submitting = false;
       submit.disabled = false;
-      submit.textContent = 'Check my brief →';
+      submit.textContent = 'Create recorded draft →';
     }
   };
-  $('#ss-edit').onclick = () => { $('#ss-run').hidden = true; $('#ss-form').hidden = false; clearErrors(); show(0); };
+  $('#ss-confirm').onclick = async () => {
+    const rid = activeRun;
+    $('#ss-confirm').disabled = true;
+    try {
+      const response = await fetch('/api/runs/' + encodeURIComponent(rid) + '/confirm', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({revision})});
+      if (!response.ok) throw new Error('Confirmation rejected');
+      const result = await response.json();
+      if (rid === activeRun) renderRun(result);
+    } catch { runError('Confirmation was rejected. Refresh this run or submit an updated brief.'); }
+    finally { $('#ss-confirm').disabled = false; }
+  };
+  $('#ss-edit').onclick = () => { activeRun = null; revision = null; clearTimeout(pollTimer); $('#ss-frame').removeAttribute('src'); $('#ss-run').hidden = true; $('#ss-form').hidden = false; clearErrors(); show(0); };
   $('#ss-privacy-toggle').onclick = () => { const panel = $('#ss-privacy'); panel.hidden = !panel.hidden; $('#ss-privacy-toggle').setAttribute('aria-expanded', String(!panel.hidden)); };
   fields.style_preferences.onchange = sync;
   show(0);
