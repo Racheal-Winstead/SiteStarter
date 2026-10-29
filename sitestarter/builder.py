@@ -8,6 +8,7 @@ accessed here. Untrusted text is escaped and only validated values enter CSS.
 from html import escape
 
 from .design_agent import contrast_ratio, validate_design_plan
+from .brief_contract import BRIEF_LIMITS, text_error
 
 
 class BuildError(ValueError):
@@ -19,16 +20,10 @@ def validate_brief(brief):
     if not isinstance(brief, dict):
         return ["brief must be a JSON object"]
     errors = []
-    for key, limit in (("request_id", 128), ("name", 120), ("purpose", 500),
-                       ("about", 4000), ("contact", 500)):
-        value = brief.get(key)
-        if not isinstance(value, str) or not value.strip():
-            errors.append(f"brief.{key} must be non-empty text")
-        elif len(value) > limit:
-            errors.append(f"brief.{key} must be at most {limit} characters")
-        elif any((ord(char) < 32 and char not in "\n\r\t")
-                 or 0xD800 <= ord(char) <= 0xDFFF for char in value):
-            errors.append(f"brief.{key} contains unsupported characters")
+    for key, limit in BRIEF_LIMITS.items():
+        error = text_error(brief.get(key), limit)
+        if error:
+            errors.append(f"brief.{key} {error}")
     return errors
 
 
