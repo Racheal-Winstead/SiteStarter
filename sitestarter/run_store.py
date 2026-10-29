@@ -1,30 +1,36 @@
 """In-memory, session-owned recorded runs and a server-enforced output gate."""
 import copy
 import hashlib
-import re
 import secrets
 import threading
 import time
 
 from .recorded_run import run_recorded
-
-PATTERNS = (
-    ("ignore_previous", re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior)\s+(?:rules|instructions)", re.I)),
-    ("markup", re.compile(r"<\s*/?\s*(?:script|iframe|object|embed)\b|\bon\w+\s*=|javascript:", re.I)),
-)
+from .final_checks import find_instruction_like_text
 
 
 def review_warnings(brief, result):
-    """Narrow product-review heuristic, not a prompt-injection security boundary."""
+    """Apply the shared detector to input and honor the loop's output warnings."""
     content = result.get("content_plan") or {}
-    facts = dict(brief, heading=content.get("heading", ""), about=content.get("about_text", brief["about"]))
-    warnings = []
-    for field in ("name", "purpose", "heading", "about", "contact"):
-        for code, pattern in PATTERNS:
-            match = pattern.search(facts[field])
-            if match:
-                warnings.append({"field": field, "code": code, "passage": facts[field][:4000]})
-                break
+    page_facts = dict(brief, purpose=content.get("heading", brief["purpose"]),
+                      about=content.get("about_text", brief["about"]),
+                      contact=content.get("contact", brief["contact"]))
+    warnings, seen = [], set()
+    # The submitted goal can be truncated in the recorded heading. Check both
+    # versions so a warning lost by that transformation cannot silently vanish.
+    sources = (("brief", brief, find_instruction_like_text(brief)),
+               ("page", page_facts, result.get("warnings", [])),
+               ("page", page_facts, find_instruction_like_text(page_facts)))
+    for source, facts, detected in sources:
+        for warning in detected:
+            field, pattern = warning["field"], warning["pattern"]
+            passage = facts[field]
+            key = (field, pattern, passage)
+            if key in seen:
+                continue
+            seen.add(key)
+            warnings.append({"field": field, "code": warning["code"], "pattern": pattern,
+                             "source": source, "passage": passage})
     return warnings
 
 
@@ -50,7 +56,8 @@ class RunStore:
             # A new request invalidates the session's prior draft and confirmations.
             record = {"request_id": brief["request_id"], "status": "running", "stage": "planning",
                       "events": ["Brief validated; recorded-response run started."], "warnings": [],
-                      "revision": None, "html": None, "brief": copy.deepcopy(brief), "rounds": 0}
+                      "revision": None, "html": None, "brief": copy.deepcopy(brief), "rounds": 0,
+                      "trace": []}
             self.sessions[sid] = {"activity": self.clock(), "record": record}
             return sid, record["request_id"]
 
@@ -65,7 +72,7 @@ class RunStore:
         with self.lock:
             r = self._record(sid, rid)
             # Polling never renews activity or returns unreleased HTML.
-            return copy.deepcopy({k: r[k] for k in ("request_id", "status", "stage", "events", "warnings", "revision", "rounds")})
+            return copy.deepcopy({k: r[k] for k in ("request_id", "status", "stage", "events", "warnings", "revision", "rounds", "trace")})
 
     def execute(self, sid, rid, runner=run_recorded):
         with self.lock:
@@ -89,6 +96,9 @@ class RunStore:
             with self.lock:
                 r = self._record(sid, rid)  # Late callbacks cannot recreate an expired/edited run.
                 r["rounds"] = result.get("rounds", 0)
+                # Sam's structured trace contains fingerprints and fixed labels,
+                # not the private passages returned separately for user review.
+                r["trace"] = copy.deepcopy(result.get("trace", []))
                 for call in result.get("calls", []):
                     r["events"].append(f"{call['agent']} {call['kind']} round {call['round']} attempt {call['attempt']}: " + ("accepted" if call["accepted"] else "rejected"))
                 if result["status"] != "ready" or not result.get("html"):
@@ -101,6 +111,8 @@ class RunStore:
                 r["warnings"] = warnings
                 r["status"] = "review_required" if warnings else "ready"
                 r["stage"] = "review" if warnings else "done"
+                r["trace"].append({"event": "delivery_gate", "status": r["status"],
+                                   "warnings": [{k: w[k] for k in ("field", "code", "pattern")} for w in warnings]})
                 r["events"].append("Content warnings require your review; output withheld." if warnings else "Output released: Ready.")
         except KeyError:
             return
@@ -119,6 +131,7 @@ class RunStore:
             if r["status"] != "review_required" or not isinstance(revision, str) or not secrets.compare_digest(revision, r["revision"]):
                 raise PermissionError("Confirmation does not match a pending reviewed draft")
             r.update(status="ready", stage="done")
+            r["trace"].append({"event": "delivery_gate", "status": "ready", "confirmation": "user_confirmed_revision"})
             r["events"].extend(["User explicitly confirmed warnings for this draft revision.", "Output released: Ready."])
             self.sessions[sid]["activity"] = self.clock()
             return self.snapshot(sid, rid)

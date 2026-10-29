@@ -42,11 +42,18 @@ not release it. Explicit confirmation of that revision releases the already
 safety-checked draft; editing creates a new request instead. Text is displayed
 using textContent in the UI and escaped by the Builder.
 
-Warning patterns are deliberately narrow heuristics, not comprehensive factual
-verification or a security boundary. The local policy checks both supplied brief
-text and accepted output text for selected instruction/markup patterns. It is
-separate from Sam's unmerged trace/warning work and should be reconciled with it
-before integrating overlapping changes.
+Warning detection now uses Sam's shared `find_instruction_like_text` function,
+including its reworded-instruction patterns. The gate honors the planning loop's
+returned warnings and checks both the original brief and accepted page facts.
+Identical field/pattern/passage warnings are deduplicated. Known detector misses
+remain documented by the shared warning evaluation; this is not comprehensive
+factual verification or a prompt-injection security boundary.
+
+Session-owned status responses also retain Sam's fingerprint-based `trace`.
+Its planning-loop result may say Ready because HTML checks passed; a subsequent
+`delivery_gate` event records whether the Coordinator withheld that output for
+review. Explicit confirmation appends a separate release event. Private passages
+are returned in the review warnings, never copied into the structured trace.
 
 ## Tests and limits
 
