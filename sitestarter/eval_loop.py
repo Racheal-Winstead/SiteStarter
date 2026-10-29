@@ -103,6 +103,10 @@ def load_cases(data, brief):
         if not isinstance(expect, dict) or not all(isinstance(expect.get(k), str)
                                                    for k in ("status", "stage")):
             raise CaseError(f"{where}: expect needs status and stage text")
+        expect_warnings = expect.get("warnings")
+        if expect_warnings is not None and (not isinstance(expect_warnings, list) or not all(
+                isinstance(w, str) for w in expect_warnings)):
+            raise CaseError(f"{where}: expect.warnings must be a list of field names")
         changes = case.get("brief_changes", {})
         if not isinstance(changes, dict):
             raise CaseError(f"{where}: brief_changes must be an object")
@@ -115,7 +119,9 @@ def load_cases(data, brief):
                              for n, step in enumerate(steps, 1)]
         cases.append({"id": case["id"], "description": case.get("description", ""),
                       "brief": dict(brief, **changes), "replies": replies,
-                      "expect": {"status": expect["status"], "stage": expect["stage"]}})
+                      "expect": dict({"status": expect["status"], "stage": expect["stage"]},
+                                     **({"warnings": sorted(expect_warnings)}
+                                        if expect_warnings is not None else {}))})
     return cases
 
 
@@ -124,10 +130,13 @@ def run_case(case):
                                _recorded(case["replies"][DESIGN_AGENT]))
     expect = case["expect"]
     has_page = result["html"] is not None
+    warned = sorted(w["field"] for w in result.get("warnings", []))
     matched = (result["status"] == expect["status"] and result["stage"] == expect["stage"]
-               and has_page == (expect["status"] == "ready"))
+               and has_page == (expect["status"] == "ready")
+               and ("warnings" not in expect or warned == expect["warnings"]))
     return {"id": case["id"], "expect": expect, "status": result["status"], "stage": result["stage"],
-            "has_page": has_page, "matched": matched, "errors": result["errors"], "calls": result["calls"]}
+            "has_page": has_page, "matched": matched, "errors": result["errors"], "calls": result["calls"],
+            "warnings": warned, "trace": result.get("trace", [])}
 
 
 def score(runs):
@@ -182,6 +191,9 @@ def report(runs, scores):
     for run in runs:
         got = f"{run['status']}/{run['stage']}"
         want = f"{run['expect']['status']}/{run['expect']['stage']}"
+        if run["warnings"] or "warnings" in run["expect"]:
+            got += f" warnings={run['warnings']}"
+            want += f" warnings={run['expect'].get('warnings', [])}"
         lines.append(f"  {'ok  ' if run['matched'] else 'MISS'} {run['id']}: {got}"
                      + ("" if run["matched"] else f" (expected {want})"))
     e2e = scores["end_to_end"]
@@ -220,7 +232,8 @@ def main(argv=None):
     runs = [run_case(case) for case in cases]
     scores = score(runs)
     if args.json:
-        print(json.dumps({"cases": [{k: r[k] for k in ("id", "status", "stage", "matched")} for r in runs],
+        print(json.dumps({"cases": [{k: r[k] for k in ("id", "status", "stage", "warnings", "matched")}
+                                    for r in runs],
                           "scores": scores}, indent=2))
     else:
         print(report(runs, scores))

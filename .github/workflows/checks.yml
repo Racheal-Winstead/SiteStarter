@@ -28,3 +28,9 @@ jobs:
         run: python -m sitestarter.loop_demo --brief examples/bakery-brief.json --replies examples/bakery-loop-replies.json
       - name: Score the review loop on recorded cases
         run: python -m sitestarter.eval_loop --brief examples/bakery-brief.json --cases examples/eval-cases.json
+      - name: Trace one recorded run
+        run: python -m sitestarter.trace_demo --brief examples/bakery-brief.json --cases examples/eval-cases.json --case instruction-text-in-brief
+      - name: Score the warning patterns
+        run: python -m sitestarter.warning_eval --cases examples/warning-cases.json
+      - name: Trace the reworded-instruction case
+        run: python -m sitestarter.trace_demo --brief examples/bakery-brief.json --cases examples/eval-cases.json --case reworded-instruction-in-brief
