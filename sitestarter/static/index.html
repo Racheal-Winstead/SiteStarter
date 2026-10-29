@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SiteStarter — Your bright idea</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head><body><div id="ss-workshop" aria-label="SiteStarter guided workshop mockup">
+
+
+<header><div class="ss-brand"><span class="ss-symbol" aria-hidden="true">s.</span>SiteStarter</div><span class="ss-prototype">Local preview · real brief validation</span></header>
+<main>
+<div class="ss-art" aria-hidden="true"><div class="ss-art-window"></div><span class="ss-art-star">✳</span><span class="ss-art-sticker">big ideas<br>start small</span></div>
+
+<p class="ss-eyebrow">No coding required</p>
+<h1>Your bright idea,<br><em>beautifully on the web.</em></h1>
+<p class="ss-lede">Tell us your story. We’ll help build your first draft.</p>
+<div class="ss-layout">
+<section class="ss-form" aria-label="Website brief">
+<ol class="ss-steps"><li aria-current="step">1 · Your business</li><li>2 · Your website</li><li>3 · Review & create</li></ol>
+<form id="ss-form" novalidate>
+<div data-step="0"><h2>Let’s get acquainted!</h2><p class="ss-help">Start with the basics. Everyday words are perfect.</p>
+<label for="ss-name">Business or project name</label><input id="ss-name" maxlength="120" placeholder="e.g. The Corner Studio" autocomplete="off" aria-describedby="ss-name-error"><p id="ss-name-error" class="ss-error" hidden></p>
+<label for="ss-about">What do you do?</label><textarea id="ss-about" maxlength="4000" placeholder="What do you make, offer, or help people with?" aria-describedby="ss-about-error"></textarea><p id="ss-about-error" class="ss-error" hidden></p>
+<label for="ss-purpose">What should visitors do?</label><input id="ss-purpose" maxlength="500" placeholder="e.g. Get in touch about a class" autocomplete="off" aria-describedby="ss-purpose-error"><p id="ss-purpose-error" class="ss-error" hidden></p>
+<div class="ss-actions"><button type="button" id="ss-example">Use sample details</button><button type="button" class="ss-primary" data-next>Continue →</button></div></div>
+<div data-step="1" hidden><h2>A style all your own!</h2><label for="ss-contact">Contact details to display</label><textarea id="ss-contact" maxlength="500" placeholder="A public email, phone number, or business address" aria-describedby="ss-contact-error"></textarea><p id="ss-contact-error" class="ss-error" hidden></p><p class="ss-help">Only add details you want displayed publicly. Avoid private customer information.</p><label for="ss-style">Style preferences <span class="ss-help">(optional)</span></label><select id="ss-style" aria-describedby="ss-style-error"><option value="calm_welcoming">Calm & welcoming</option><option value="clean_professional">Clean & professional</option><option value="bold_expressive">Bold & expressive</option></select><p id="ss-style-error" class="ss-error" hidden></p><div class="ss-actions"><button type="button" data-back>← Back</button><button type="button" class="ss-primary" data-next>Review my details →</button></div></div>
+<div data-step="2" hidden><h2>Looking good? Let’s review!</h2><p class="ss-help">These are the details your draft will use.</p><dl id="ss-review"></dl><div class="ss-actions"><button type="button" data-back>← Edit details</button><button type="submit" class="ss-primary">Check my brief →</button></div><p class="ss-help" style="margin-top:14px">Your details go to the local Coordinator validator. No AI calls or website generation yet.</p></div>
+<p id="ss-error" class="ss-error" role="alert" hidden></p>
+</form>
+<section id="ss-run" hidden aria-live="polite"><h2>Ready for the next step!</h2><p>Your brief passed the Coordinator’s checks.</p><p class="ss-help">This confirms input validation only. Agents have not started, and no website has been generated.</p><p>Request ID: <code id="ss-request-id"></code></p><button type="button" id="ss-edit">← Edit my details</button></section>
+</section>
+<aside>
+<div class="ss-hostess"><img src="/hostess.jpg" alt="Painted 1950s hostess in a powder-blue dress and white apron welcoming you to SiteStarter"><span class="ss-ad-badge" aria-hidden="true">Made for your<br>next big thing!</span></div>
+<div class="ss-paper"><p class="ss-eyebrow">Your website starter</p><h2 id="ss-summary-name">Something good<br>starts here.</h2><dl><dt>Your story</dt><dd id="ss-summary-about">Your description appears here when you continue.</dd><dt>Your goal</dt><dd id="ss-summary-purpose">What you’d like visitors to do.</dd><dt>Your style</dt><dd id="ss-summary-style">Calm & welcoming</dd></dl><p class="ss-note">A working outline, shaped by your answers.</p></div><ul class="ss-deliverables"><li>A single-page website draft</li><li>A preview before you download</li><li>An HTML file to take with you</li></ul></aside>
+</div>
+<div id="ss-privacy" class="ss-privacy" hidden>This local preview sends your form to a Python validator on this computer. It uses no cookies, browser storage, analytics, or AI service and does not save submitted briefs. Entries remain in the form until you close or refresh it. Use sample details while reviewing. Optional display fonts are loaded from Google Fonts; your brief is not sent there.</div>
+</main><footer><span>Your idea. Your details. Your next step.</span><button id="ss-privacy-toggle" type="button" aria-expanded="false">Privacy in this preview</button></footer>
+
+</div>
+</body></html>
