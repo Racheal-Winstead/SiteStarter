@@ -5,6 +5,9 @@
   const steps = [...root.querySelectorAll('[data-step]')];
   let step = 0;
   let submitting = false;
+  let configurationReady = false;
+  let liveMode = false;
+  const submitLabel = () => liveMode ? 'Create live draft →' : 'Create recorded draft →';
   let activeRun = null;
   let revision = null;
   let pollTimer = null;
@@ -17,7 +20,7 @@
   function renderRun(result) {
     revision = result.revision;
     $('#ss-run-status').textContent = {
-      running:'Planning and reviewing your recorded draft…',
+      running:liveMode ? 'Planning and reviewing your live draft…' : 'Planning and reviewing your recorded draft…',
       review_required:'Review required — preview and download are withheld.',
       ready:'Ready — final checks and any required review have passed.',
       failed:'The run stopped. No output is available.',
@@ -136,6 +139,7 @@
     if (submitting) return;
     if (step !== 2) { root.querySelector('[data-step="' + step + '"] [data-next]').click(); return; }
     clearErrors();
+    if (!configurationReady) { showErrors({_form:'Server configuration is not available yet. Refresh the page and try again.'}); return; }
     submitting = true;
     const submit = root.querySelector('[type=submit]');
     submit.disabled = true;
@@ -162,7 +166,7 @@
     } finally {
       submitting = false;
       submit.disabled = false;
-      submit.textContent = 'Create recorded draft →';
+      submit.textContent = submitLabel();
     }
   };
   $('#ss-confirm').onclick = async () => {
@@ -180,4 +184,19 @@
   $('#ss-privacy-toggle').onclick = () => { const panel = $('#ss-privacy'); panel.hidden = !panel.hidden; $('#ss-privacy-toggle').setAttribute('aria-expanded', String(!panel.hidden)); };
   fields.style_preferences.onchange = sync;
   show(0);
+  fetch('/api/config', {cache:'no-store'}).then(response => {
+    if (!response.ok) throw new Error('Missing configuration');
+    return response.json();
+  }).then(config => {
+    if (!['live','recorded'].includes(config.mode)) throw new Error('Unknown mode');
+    liveMode = config.mode === 'live';
+    configurationReady = true;
+    root.querySelector('.ss-prototype').textContent = liveMode ? 'Live Anthropic · ' + config.model : 'Local preview · recorded-response workflow';
+    root.querySelector('[type=submit]').textContent = submitLabel();
+    if (liveMode) {
+      root.querySelector('#ss-run > .ss-help').textContent = 'Live Content and Design calls to Anthropic. The Builder is deterministic. Responses still require validation and may need revision or your review.';
+      root.querySelector('[data-step="2"] > .ss-help:last-child').textContent = 'Creating this draft sends your brief to Anthropic and uses institutional API credits. Use fictional business details for testing.';
+      $('#ss-privacy').textContent += ' Live mode is enabled: brief and planning data are also sent to Anthropic. Local expiration does not delete provider-held data. The API key stays on the backend.';
+    }
+  }).catch(() => showErrors({_form:'Could not load server mode. Refresh the page before submitting.'}));
 })();
