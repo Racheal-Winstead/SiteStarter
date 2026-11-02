@@ -18,3 +18,18 @@
 #ss-workshop main>.ss-eyebrow::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--ss-accent);clip-path:polygon(0 0,100% 0,calc(100% - 10px) 50%,100% 100%,0 100%,10px 50%)}
 
 body{margin:0;background:#fff3d9} #ss-workshop{max-width:1100px;margin:20px auto} #ss-workshop code{overflow-wrap:anywhere} #ss-workshop [aria-invalid=true]{border:2px solid #ae261e} @media(max-width:680px){#ss-workshop{margin:0;border:0}}
+
+#ss-workshop .ss-style-guide{margin-top:22px}
+#ss-workshop .ss-style-eyebrow{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px}
+#ss-workshop .ss-style-sample{padding:24px;background:#fff8e9;color:#263b43;border:1px solid #859d9f;border-radius:8px;overflow-wrap:anywhere}
+#ss-workshop .ss-style-business{font:10px Arial,sans-serif;letter-spacing:1.3px;margin-bottom:18px}
+#ss-workshop .ss-style-sample h3{font:28px/1.2 Georgia,serif;margin:0 0 12px}
+#ss-workshop .ss-style-sample>p:not(.ss-style-business){font:14px/1.6 Arial,sans-serif;margin:0}
+#ss-workshop .ss-style-button{display:inline-block;background:#356072;color:#fff;padding:12px 18px;border-radius:24px;font:14px Arial,sans-serif;margin-top:20px}
+#ss-workshop .ss-style-sample[data-style="clean_professional"]{background:#fff;color:#182b40}
+#ss-workshop [data-style="clean_professional"] h3{font-family:Arial,sans-serif}
+#ss-workshop [data-style="clean_professional"] .ss-style-button{background:#193c60;border-radius:4px}
+#ss-workshop .ss-style-sample[data-style="bold_expressive"]{background:#fff1da;color:#252321}
+#ss-workshop [data-style="bold_expressive"] h3{font-family:Verdana,sans-serif;font-weight:700}
+#ss-workshop [data-style="bold_expressive"] .ss-style-button{background:#b43d14}
+#ss-workshop #ss-style-caption{margin-top:10px}
