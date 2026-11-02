@@ -46,7 +46,7 @@ class RunStore:
             if now - self.sessions[sid]["activity"] >= self.ttl:
                 del self.sessions[sid]
 
-    def start(self, brief, sid=None):
+    def start(self, brief, sid=None, mode="recorded"):
         with self.lock:
             self._expire()
             if sid not in self.sessions:
@@ -55,9 +55,9 @@ class RunStore:
                 sid = secrets.token_urlsafe(32)
             # A new request invalidates the session's prior draft and confirmations.
             record = {"request_id": brief["request_id"], "status": "running", "stage": "planning",
-                      "events": ["Brief validated; recorded-response run started."], "warnings": [],
+                      "events": ["Brief validated; " + ("live-model" if mode == "live" else "recorded-response") + " run started."], "warnings": [],
                       "revision": None, "html": None, "brief": copy.deepcopy(brief), "rounds": 0,
-                      "trace": []}
+                      "trace": [], "started": self.clock()}
             self.sessions[sid] = {"activity": self.clock(), "record": record}
             return sid, record["request_id"]
 
@@ -66,7 +66,11 @@ class RunStore:
         session = self.sessions.get(sid)
         if not session or session["record"]["request_id"] != rid:
             raise KeyError("Run unavailable or expired")
-        return session["record"]
+        r = session["record"]
+        if r["status"] == "running" and self.clock() - r["started"] > 240:
+            r.update(status="timed_out", stage="timed_out", html=None)
+            r["events"].append("Overall deadline reached; late output will be discarded.")
+        return r
 
     def snapshot(self, sid, rid):
         with self.lock:
@@ -88,6 +92,8 @@ class RunStore:
         def emit(event):
             with self.lock:
                 current = self._record(sid, rid)
+                if current["status"] != "running":
+                    raise KeyError("Run ended")
                 current["events"].append(event)
 
         try:
@@ -95,6 +101,8 @@ class RunStore:
             warnings = review_warnings(brief, result) if result["status"] == "ready" else []
             with self.lock:
                 r = self._record(sid, rid)  # Late callbacks cannot recreate an expired/edited run.
+                if r["status"] != "running":
+                    return
                 r["rounds"] = result.get("rounds", 0)
                 # Sam's structured trace contains fingerprints and fixed labels,
                 # not the private passages returned separately for user review.
@@ -120,8 +128,9 @@ class RunStore:
             with self.lock:
                 try:
                     r = self._record(sid, rid)
-                    r.update(status="failed", stage="execution", html=None)
-                    r["events"].append("Run failed; output withheld.")
+                    if r["status"] == "running":
+                        r.update(status="failed", stage="execution", html=None)
+                        r["events"].append("Run failed; output withheld.")
                 except KeyError:
                     pass
 

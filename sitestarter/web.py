@@ -16,6 +16,9 @@ FILES = {"/": ("index.html", "text/html; charset=utf-8"),
          "/hostess.jpg": ("hostess.jpg", "image/jpeg")}
 MAX_BODY = 64 * 1024
 RUNS = RunStore()
+RUNNER = None  # None preserves the default recorded runner; live is explicit.
+MODE = "recorded"
+MODEL = None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -55,6 +58,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.valid_host():
             return self.json_response(403, {"error": "Invalid host"})
+        if self.path == "/api/config":
+            return self.json_response(200, {"mode": MODE, "model": MODEL})
         parts = self.path.split("/")
         if len(parts) in (4, 5) and parts[1:3] == ["api", "runs"]:
             rid = parts[3]
@@ -104,21 +109,29 @@ class Handler(BaseHTTPRequestHandler):
         result = prepare_brief(payload)
         if self.path == "/api/runs" and result["status"] == "accepted":
             try:
-                sid, rid = RUNS.start(result["brief"], self.session_id())
+                sid, rid = RUNS.start(result["brief"], self.session_id(), mode=MODE)
             except OverflowError:
                 return self.json_response(503, {"error": "Local preview is busy; try again later"})
-            threading.Thread(target=RUNS.execute, args=(sid, rid), daemon=True).start()
+            kwargs = {"runner": RUNNER} if RUNNER is not None else {}
+            threading.Thread(target=RUNS.execute, args=(sid, rid), kwargs=kwargs, daemon=True).start()
             return self.json_response(202, {"status": "running", "request_id": rid}, cookie=sid)
         result.pop("brief")  # No persistent records or client-side copy of approved data.
         self.json_response(200 if result["status"] == "accepted" else 422, result)
 
 
 def main():
+    global RUNNER, MODE, MODEL
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=4173)
+    parser.add_argument("--live", action="store_true", help="Opt in to paid Anthropic calls; recorded mode is the default")
+    parser.add_argument("--model", default="claude-sonnet-5-5")
     args = parser.parse_args()
+    if args.live:
+        from .live_run import make_live_runner
+        RUNNER = make_live_runner(args.model)
+        MODE, MODEL = "live", args.model
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"SiteStarter recorded workflow: http://127.0.0.1:{server.server_port}", flush=True)
+    print(f"SiteStarter {MODE} workflow: http://127.0.0.1:{server.server_port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

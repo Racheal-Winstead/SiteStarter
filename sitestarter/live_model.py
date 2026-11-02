@@ -28,14 +28,14 @@ class LiveModelError(RuntimeError):
     """A live call failed. The message never includes the key or the reply body."""
 
 
-def to_api_request(messages, model):
+def to_api_request(messages, model, max_tokens=MAX_TOKENS):
     """Turn the agents' [{role, content}] list into a Messages API body.
 
     A "system" message becomes the top-level system field; the rest stay in order.
     """
     system = [m["content"] for m in messages if m["role"] == "system"]
     turns = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
-    body = {"model": model, "max_tokens": MAX_TOKENS, "messages": turns}
+    body = {"model": model, "max_tokens": max_tokens, "messages": turns}
     if system:
         body["system"] = "\n\n".join(system)
     return body
@@ -49,21 +49,29 @@ def reply_text(payload):
                    if isinstance(block, dict) and block.get("type") == "text")
 
 
-def make_live_model(model, opener=urllib.request.urlopen):
+def make_live_model(model, opener=urllib.request.urlopen, *, credential_loader=None, max_tokens=MAX_TOKENS):
     """Return call_model(messages) -> raw reply text for one model id.
 
     `opener` is replaceable so tests run without a network or a key.
     """
     if not isinstance(model, str) or not model.strip():
         raise ValueError("a model id is required")
+    if type(max_tokens) is not int or not 1 <= max_tokens <= 4096:
+        raise ValueError("max_tokens must be between 1 and 4096")
 
     def call_model(messages):
-        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if credential_loader is not None:
+            try:
+                key = credential_loader().reveal()
+            except Exception:
+                raise LiveModelError("credential could not be loaded") from None
+        else:
+            key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
         if not key:
             raise LiveModelError("ANTHROPIC_API_KEY is not set")
         request = urllib.request.Request(
             API_URL,
-            data=json.dumps(to_api_request(messages, model)).encode("utf-8"),
+            data=json.dumps(to_api_request(messages, model, max_tokens)).encode("utf-8"),
             headers={"x-api-key": key, "anthropic-version": API_VERSION,
                      "content-type": "application/json"},
             method="POST",
@@ -72,7 +80,9 @@ def make_live_model(model, opener=urllib.request.urlopen):
             with opener(request, timeout=TIMEOUT_SECONDS) as response:
                 raw = response.read(MAX_REPLY_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            raise LiveModelError(f"provider returned HTTP {exc.code}") from None
+            status = exc.code
+            exc.close()
+            raise LiveModelError(f"provider returned HTTP {status}") from None
         except (urllib.error.URLError, OSError) as exc:
             raise LiveModelError(f"request failed: {type(exc).__name__}") from None
         if len(raw) > MAX_REPLY_BYTES:
@@ -81,6 +91,11 @@ def make_live_model(model, opener=urllib.request.urlopen):
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError):
             raise LiveModelError("reply was not JSON") from None
-        return reply_text(payload)
+        if isinstance(payload, dict) and payload.get("stop_reason") not in (None, "end_turn"):
+            raise LiveModelError("provider response was incomplete or required an unsupported continuation")
+        text = reply_text(payload)
+        if not text.strip():
+            raise LiveModelError("provider returned no text")
+        return text
 
     return call_model
