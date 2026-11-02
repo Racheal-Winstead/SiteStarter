@@ -73,7 +73,19 @@
     $('#ss-error').hidden = true;
   }
 
+  function updateStyleGuide() {
+    const descriptions = {
+      calm_welcoming: 'Soft cream, muted blue, and a classic Georgia heading.',
+      clean_professional: 'White, navy, and a clear Arial heading.',
+      bold_expressive: 'Warm cream, burnt orange, and a strong Verdana heading.'
+    };
+    const selected = fields.style_preferences.value;
+    $('#ss-style-sample').dataset.style = selected;
+    $('#ss-style-detail').textContent = descriptions[selected] || '';
+  }
+
   function sync() {
+    updateStyleGuide();
     $('#ss-summary-name').textContent = fields.name.value || 'Something good starts here.';
     $('#ss-summary-about').textContent = fields.about.value || 'Your description appears here when you continue.';
     $('#ss-summary-purpose').textContent = fields.purpose.value || 'What you’d like visitors to do.';
@@ -194,6 +206,7 @@
     root.querySelector('.ss-prototype').textContent = liveMode ? 'Live Anthropic · ' + config.model : 'Local preview · recorded-response workflow';
     root.querySelector('[type=submit]').textContent = submitLabel();
     if (liveMode) {
+      $('#ss-style-mode').textContent = 'Live mode uses your preference as guidance; this example is not an exact template.';
       root.querySelector('#ss-run > .ss-help').textContent = 'Live Content and Design calls to Anthropic. The Builder is deterministic. Responses still require validation and may need revision or your review.';
       root.querySelector('[data-step="2"] > .ss-help:last-child').textContent = 'Creating this draft sends your brief to Anthropic and uses institutional API credits. Use fictional business details for testing.';
       $('#ss-privacy').textContent += ' Live mode is enabled: brief and planning data are also sent to Anthropic. Local expiration does not delete provider-held data. The API key stays on the backend.';

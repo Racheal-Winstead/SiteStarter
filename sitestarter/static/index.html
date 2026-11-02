@@ -18,7 +18,19 @@
 <label for="ss-about">What do you do?</label><textarea id="ss-about" maxlength="4000" placeholder="What do you make, offer, or help people with?" aria-describedby="ss-about-error"></textarea><p id="ss-about-error" class="ss-error" hidden></p>
 <label for="ss-purpose">What should visitors do?</label><input id="ss-purpose" maxlength="500" placeholder="e.g. Get in touch about a class" autocomplete="off" aria-describedby="ss-purpose-error"><p id="ss-purpose-error" class="ss-error" hidden></p>
 <div class="ss-actions"><button type="button" id="ss-example">Use sample details</button><button type="button" class="ss-primary" data-next>Continue →</button></div></div>
-<div data-step="1" hidden><h2>A style all your own!</h2><label for="ss-contact">Contact details to display</label><textarea id="ss-contact" maxlength="500" placeholder="A public email, phone number, or business address" aria-describedby="ss-contact-error"></textarea><p id="ss-contact-error" class="ss-error" hidden></p><p class="ss-help">Only add details you want displayed publicly. Avoid private customer information.</p><label for="ss-style">Style preferences <span class="ss-help">(optional)</span></label><select id="ss-style" aria-describedby="ss-style-error"><option value="calm_welcoming">Calm & welcoming</option><option value="clean_professional">Clean & professional</option><option value="bold_expressive">Bold & expressive</option></select><p id="ss-style-error" class="ss-error" hidden></p><div class="ss-actions"><button type="button" data-back>← Back</button><button type="button" class="ss-primary" data-next>Review my details →</button></div></div>
+<div data-step="1" hidden><h2>A style all your own!</h2><label for="ss-contact">Contact details to display</label><textarea id="ss-contact" maxlength="500" placeholder="A public email, phone number, or business address" aria-describedby="ss-contact-error"></textarea><p id="ss-contact-error" class="ss-error" hidden></p><p class="ss-help">Only add details you want displayed publicly. Avoid private customer information.</p><label for="ss-style">Style preferences <span class="ss-help">(optional)</span></label><select id="ss-style" aria-describedby="ss-style-error ss-style-caption ss-style-mode"><option value="calm_welcoming">Calm & welcoming</option><option value="clean_professional">Clean & professional</option><option value="bold_expressive">Bold & expressive</option></select><p id="ss-style-error" class="ss-error" hidden></p>
+<div class="ss-style-guide">
+<p class="ss-style-eyebrow">A little look at your style</p>
+<section id="ss-style-sample" class="ss-style-sample" data-style="calm_welcoming" aria-label="Illustrative website style">
+<p class="ss-style-business">THE CORNER STUDIO · FICTIONAL EXAMPLE</p>
+<h3>A little room to create.</h3>
+<p>Discover beginner pottery classes in a welcoming neighborhood studio.</p>
+<span class="ss-style-button">Get in touch ↗</span>
+</section>
+<p id="ss-style-caption" class="ss-help">Style inspiration—your generated draft may vary.</p>
+<p id="ss-style-detail" class="ss-help" aria-live="polite">Soft cream, muted blue, and a classic Georgia heading.</p>
+<p id="ss-style-mode" class="ss-help">Recorded mode uses a fixed design sample; this guide does not change that sample.</p>
+</div><div class="ss-actions"><button type="button" data-back>← Back</button><button type="button" class="ss-primary" data-next>Review my details →</button></div></div>
 <div data-step="2" hidden><h2>Looking good? Let’s review!</h2><p class="ss-help">These are the details your draft will use.</p><dl id="ss-review"></dl><div class="ss-actions"><button type="button" data-back>← Edit details</button><button type="submit" class="ss-primary">Create recorded draft →</button></div><p class="ss-help" style="margin-top:14px">Your details go to a local, recorded-response workflow. No live AI or automatic publishing.</p></div>
 <p id="ss-error" class="ss-error" role="alert" hidden></p>
 </form>
